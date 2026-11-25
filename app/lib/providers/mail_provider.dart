@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../core/api_client.dart';
 import '../core/local_server_manager.dart';
+import '../core/notification_service.dart';
 import '../core/sse_client.dart';
 import '../models/models.dart';
 
@@ -207,6 +210,7 @@ class AuthNotifier extends Notifier<AuthState> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_kToken);
     ref.read(sseClientProvider).disconnect();
+    ref.read(mailProvider.notifier).resetNotificationState();
     ref.read(apiClientProvider).configure(baseUrl: state.baseUrl, token: null);
     state = state.copyWith(clearToken: true, clearUser: true, clearError: true);
   }
@@ -324,20 +328,38 @@ class MailState {
 
 class MailNotifier extends Notifier<MailState> {
   StreamSubscription<SseEvent>? _sseSub;
+  Timer? _fallbackPollTimer;
+  bool _notifBaselineReady = false;
+  int _highestSeenInboxId = 0;
+  final Set<int> _notifiedIds = <int>{};
+  bool _pollingNewMessages = false;
 
   @override
   MailState build() {
     ref.onDispose(() {
       _sseSub?.cancel();
+      _fallbackPollTimer?.cancel();
     });
     return const MailState();
   }
 
   ApiClient get _api => ref.read(apiClientProvider);
 
+  void resetNotificationState() {
+    _fallbackPollTimer?.cancel();
+    _fallbackPollTimer = null;
+    _notifBaselineReady = false;
+    _highestSeenInboxId = 0;
+    _notifiedIds.clear();
+  }
+
   Future<void> bootstrap() async {
     final auth = ref.read(authProvider);
     if (!auth.isAuthenticated) return;
+
+    final notif = ref.read(notificationServiceProvider);
+    await notif.init(onTap: _handleNotificationTap);
+    unawaited(notif.requestPermissionIfNeeded());
 
     final sse = ref.read(sseClientProvider);
     sse.connect(auth.baseUrl, auth.token!);
@@ -349,6 +371,33 @@ class MailNotifier extends Notifier<MailState> {
       refreshMetadata(),
       loadMessages(),
     ]);
+
+    await _initNotificationBaseline();
+    _fallbackPollTimer?.cancel();
+    _fallbackPollTimer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) => _pollNewInboxMessages(),
+    );
+  }
+
+  Future<void> _initNotificationBaseline() async {
+    if (!ref.read(authProvider).isAuthenticated) return;
+    try {
+      final res = await _api.getMessages(view: 'inbox', page: 1, pageSize: 20);
+      for (final m in res.items) {
+        if (m.id > _highestSeenInboxId) {
+          _highestSeenInboxId = m.id;
+        }
+      }
+    } catch (_) {
+      for (final m in state.messages) {
+        if (m.id > _highestSeenInboxId) {
+          _highestSeenInboxId = m.id;
+        }
+      }
+    } finally {
+      _notifBaselineReady = true;
+    }
   }
 
   void _handleSseEvent(SseEvent evt) {
@@ -359,15 +408,111 @@ class MailNotifier extends Notifier<MailState> {
       refreshMetadata();
       loadMessages(silent: true);
     } else if (evt.type == 'new_messages') {
+      if (!ref.read(authProvider).isAuthenticated) return;
       state = state.copyWith(toastMessage: '${evt.label} 收到 ${evt.count} 封新邮件');
       refreshMetadata();
       loadMessages(silent: true);
+      unawaited(_notifyFromSseNewMessages(evt));
     } else if (evt.type == 'sync_error') {
       state = state.copyWith(syncing: false, toastMessage: '${evt.label} 同步异常：${evt.message}');
       refreshMetadata();
     } else if (evt.type == 'data_changed') {
       refreshMetadata();
       loadMessages(silent: true);
+    }
+  }
+
+  Future<void> _notifyFromSseNewMessages(SseEvent evt) async {
+    if (!ref.read(authProvider).isAuthenticated) return;
+    List<MailMessage> fresh = const [];
+    try {
+      final res = await _api.getMessages(
+        view: 'inbox',
+        accountId: evt.accountId > 0 ? evt.accountId : null,
+        page: 1,
+        pageSize: 5,
+      );
+      if (!ref.read(authProvider).isAuthenticated) return;
+      fresh = res.items
+          .where((m) => m.id > _highestSeenInboxId && !_notifiedIds.contains(m.id))
+          .toList();
+      for (final m in fresh) {
+        if (m.id > _highestSeenInboxId) _highestSeenInboxId = m.id;
+        _notifiedIds.add(m.id);
+      }
+    } catch (_) {}
+
+    if (fresh.isEmpty && evt.count <= 0) return;
+
+    final content = buildNewMailNotificationContent(
+      accountLabel: evt.label,
+      freshMessages: fresh,
+      fallbackCount: evt.count,
+    );
+    final notifId = fresh.isNotEmpty
+        ? fresh.first.id
+        : (DateTime.now().millisecondsSinceEpoch & 0x7fffffff);
+    await ref.read(notificationServiceProvider).showNewMailNotification(
+          id: notifId,
+          title: content.title,
+          body: content.body,
+          payload: content.payload,
+        );
+  }
+
+  Future<void> _pollNewInboxMessages() async {
+    if (_pollingNewMessages || !_notifBaselineReady || !ref.read(authProvider).isAuthenticated) {
+      return;
+    }
+    _pollingNewMessages = true;
+    try {
+      final res = await _api.getMessages(view: 'inbox', page: 1, pageSize: 15);
+      if (!ref.read(authProvider).isAuthenticated) return;
+
+      final freshUnread = res.items
+          .where((m) => !m.isRead && m.id > _highestSeenInboxId && !_notifiedIds.contains(m.id))
+          .toList();
+      for (final m in res.items) {
+        if (m.id > _highestSeenInboxId) {
+          _highestSeenInboxId = m.id;
+        }
+      }
+      for (final m in freshUnread) {
+        _notifiedIds.add(m.id);
+      }
+
+      if (freshUnread.isNotEmpty) {
+        final content = buildNewMailNotificationContent(
+          accountLabel: freshUnread.first.accountLabel,
+          freshMessages: freshUnread,
+        );
+        await ref.read(notificationServiceProvider).showNewMailNotification(
+              id: freshUnread.first.id,
+              title: content.title,
+              body: content.body,
+              payload: content.payload,
+            );
+        unawaited(refreshMetadata());
+        unawaited(loadMessages(silent: true));
+      }
+    } catch (_) {
+    } finally {
+      _pollingNewMessages = false;
+    }
+  }
+
+  void _handleNotificationTap(String? payload) {
+    if (Platform.isWindows) {
+      try {
+        WindowManager.instance.getCurrent()?.show();
+      } catch (_) {}
+    }
+    if (!ref.read(authProvider).isAuthenticated) return;
+    if (payload != null && payload.startsWith('msg:')) {
+      final id = int.tryParse(payload.substring(4));
+      if (id != null) {
+        unawaited(openMessage(id));
+      }
     }
   }
 
