@@ -3,13 +3,18 @@ module mailcontrol-backend
 go 1.26.0
 
 require (
+	github.com/emersion/go-imap v1.2.1
+	github.com/emersion/go-imap-id v0.0.0-20190926060100-f94a56b9ecde
+	github.com/emersion/go-message v0.18.2
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	golang.org/x/crypto v0.59.0
+	golang.org/x/text v0.44.0
 	modernc.org/sqlite v1.63.0
 )
 
 require (
 	github.com/dustin/go-humanize v1.1.0 // indirect
+	github.com/emersion/go-sasl v0.0.0-20200509203442-7bfe0ed36a21 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.1.0 // indirect
