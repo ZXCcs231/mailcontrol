@@ -159,20 +159,19 @@
     </div>
 
     <div id="tab-accounts" class="hidden">
-      <div class="card">
-        <div class="row" style="margin-bottom:12px;">
-          <h3 style="margin:0;">全站已绑定邮箱同步状态</h3>
+      <div class="card row" style="margin-bottom:14px;">
+        <div>
+          <h3 style="margin:0;">邮箱同步监控（按用户分类）</h3>
+          <div class="muted">按系统用户分组展示名下绑定的所有邮箱、同步状态与异常详情</div>
+        </div>
+        <div class="row">
+          <select id="acct-user-filter" style="width:170px;" onchange="renderAccountGroups()">
+            <option value="">全部用户</option>
+          </select>
           <button class="btn btn-sm" onclick="loadAccounts()">刷新</button>
         </div>
-        <div style="overflow-x:auto;">
-          <table>
-            <thead>
-              <tr><th>ID</th><th>所属用户</th><th>名称 / 邮箱</th><th>服务商</th><th>同步状态</th><th>邮件数</th><th>最近同步 / 错误详情</th><th>操作</th></tr>
-            </thead>
-            <tbody id="accounts-tbody"></tbody>
-          </table>
-        </div>
       </div>
+      <div id="accounts-groups"></div>
     </div>
 
     <div id="tab-maintenance" class="hidden">
@@ -358,20 +357,101 @@ async function deleteUser(id, name) {
   } catch (e) { alert(e.message); }
 }
 
+let allAccountsCache = [];
+
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 async function loadAccounts() {
   const d = await api('/api/admin/accounts');
-  document.getElementById('accounts-tbody').innerHTML = d.items.map(a => `
-    <tr>
-      <td>${a.id}</td>
-      <td>${a.username}</td>
-      <td><b>${a.label}</b><br/><span class="muted">${a.email_address}</span></td>
-      <td>${a.provider_id}</td>
-      <td><span class="pill ${a.last_sync_status==='error' ? 'pill-err' : (a.last_sync_status==='ok' ? 'pill-ok' : 'pill-blue')}">${a.last_sync_status}</span></td>
-      <td>${a.messages_count}</td>
-      <td>${fmtTime(a.last_sync_at)}${a.last_sync_error ? '<br/><span style="color:#dc2626;font-size:12px;">' + a.last_sync_error + '</span>' : ''}</td>
-      <td><button class="btn btn-sm" onclick="syncAccount(${a.id})">立即同步</button></td>
-    </tr>
-  `).join('');
+  allAccountsCache = d.items || [];
+  const sel = document.getElementById('acct-user-filter');
+  const prev = sel.value;
+  const usersMap = new Map();
+  for (const a of allAccountsCache) {
+    if (!usersMap.has(String(a.user_id))) {
+      usersMap.set(String(a.user_id), a.username);
+    }
+  }
+  sel.innerHTML = '<option value="">全部用户 (' + usersMap.size + ')</option>' +
+    Array.from(usersMap.entries()).map(([uid, uname]) =>
+      `<option value="${uid}">${esc(uname)} (ID:${uid})</option>`
+    ).join('');
+  if (prev && usersMap.has(prev)) sel.value = prev;
+  renderAccountGroups();
+}
+
+function renderAccountGroups() {
+  const filterUid = document.getElementById('acct-user-filter').value;
+  const groups = new Map();
+  for (const a of allAccountsCache) {
+    const uid = String(a.user_id);
+    if (filterUid && uid !== filterUid) continue;
+    if (!groups.has(uid)) {
+      groups.set(uid, { user_id: a.user_id, username: a.username, items: [] });
+    }
+    groups.get(uid).items.push(a);
+  }
+
+  const container = document.getElementById('accounts-groups');
+  if (groups.size === 0) {
+    container.innerHTML = '<div class="card muted" style="text-align:center;padding:32px;">暂无已绑定的邮箱账号</div>';
+    return;
+  }
+
+  container.innerHTML = Array.from(groups.values()).map(g => {
+    const totalMsgs = g.items.reduce((sum, x) => sum + (x.messages_count || 0), 0);
+    const errCnt = g.items.filter(x => x.last_sync_status === 'error').length;
+    const initial = esc((g.username || 'U').slice(0, 1).toUpperCase());
+    return `
+      <div class="card">
+        <div class="row" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+          <div class="row" style="gap:10px;">
+            <div class="logo" style="width:32px;height:32px;font-size:14px;border-radius:50%;">${initial}</div>
+            <div>
+              <div style="font-weight:700;font-size:15px;">${esc(g.username)} <span class="muted" style="font-weight:400;">(UID: ${g.user_id})</span></div>
+              <div class="muted">共绑定 ${g.items.length} 个邮箱 · 累计 ${totalMsgs} 封邮件${errCnt ? ` · <span style="color:var(--danger);font-weight:600;">${errCnt} 个同步异常</span>` : ''}</div>
+            </div>
+          </div>
+          <button class="btn btn-sm" onclick="syncUserAccounts(${g.user_id})">同步该用户全部邮箱</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr><th>ID</th><th>名称 / 邮箱</th><th>服务商</th><th>同步状态</th><th>邮件数</th><th>最近同步 / 错误详情</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+              ${g.items.map(a => `
+                <tr>
+                  <td>${a.id}</td>
+                  <td><b>${esc(a.label)}</b><br/><span class="muted">${esc(a.email_address)}</span></td>
+                  <td><span class="pill pill-gray">${esc(a.provider_id)}</span></td>
+                  <td><span class="pill ${a.last_sync_status==='error' ? 'pill-err' : (a.last_sync_status==='ok' ? 'pill-ok' : 'pill-blue')}">${esc(a.last_sync_status)}</span></td>
+                  <td>${a.messages_count}</td>
+                  <td>${fmtTime(a.last_sync_at)}${a.last_sync_error ? '<br/><span style="color:#dc2626;font-size:12px;">' + esc(a.last_sync_error) + '</span>' : ''}</td>
+                  <td><button class="btn btn-sm" onclick="syncAccount(${a.id})">立即同步</button></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function syncUserAccounts(uid) {
+  const list = allAccountsCache.filter(a => a.user_id === uid);
+  for (const a of list) {
+    await api('/api/admin/accounts/' + a.id + '/sync', { method: 'POST' });
+  }
+  alert('已触发该用户 ' + list.length + ' 个邮箱的后台同步');
+  loadAccounts();
 }
 
 async function syncAccount(id) {
