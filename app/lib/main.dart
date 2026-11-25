@@ -1,8 +1,10 @@
-import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'core/theme.dart';
 import 'providers/mail_provider.dart';
+import 'screens/auth_screen.dart';
+import 'screens/home_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,9 +23,9 @@ class MailControlApp extends ConsumerWidget {
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: auth.themeMode,
-      home: const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      ),
+      home: !auth.initialized
+          ? const Scaffold(body: Center(child: CircularProgressIndicator()))
+          : (auth.isAuthenticated ? const HomeScreen() : const AuthScreen()),
     );
   }
 }
