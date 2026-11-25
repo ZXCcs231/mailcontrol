@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -48,6 +49,8 @@ class NotificationService {
   NotificationService([FlutterLocalNotificationsPlugin? plugin])
       : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
 
+  static const _winChannel = MethodChannel('mailcontrol/windows_notifications');
+
   final FlutterLocalNotificationsPlugin _plugin;
   bool _initialized = false;
   void Function(String? payload)? _onTap;
@@ -59,21 +62,25 @@ class NotificationService {
     if (_initialized) return;
 
     try {
-      const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-      const windowsInit = WindowsInitializationSettings(
-        appName: 'MailControl',
-        appUserModelId: 'com.mailcontrol.mailcontrol_app',
-        guid: '9f3a6d14-2c7b-4f8e-a1d5-7b3c9e041f22',
-      );
-      const settings = InitializationSettings(
-        android: androidInit,
-        windows: windowsInit,
-      );
-      await _plugin.initialize(
-        settings: settings,
-        onDidReceiveNotificationResponse: (resp) => _onTap?.call(resp.payload),
-      );
-      _initialized = true;
+      if (Platform.isWindows) {
+        _winChannel.setMethodCallHandler((call) async {
+          if (call.method == 'onTap') {
+            _onTap?.call(call.arguments as String?);
+          }
+        });
+        _initialized = true;
+        return;
+      }
+
+      if (Platform.isAndroid) {
+        const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+        const settings = InitializationSettings(android: androidInit);
+        await _plugin.initialize(
+          settings,
+          onDidReceiveNotificationResponse: (resp) => _onTap?.call(resp.payload),
+        );
+        _initialized = true;
+      }
     } catch (_) {}
   }
 
@@ -96,25 +103,32 @@ class NotificationService {
       await init(onTap: _onTap);
     }
     try {
-      const androidDetails = AndroidNotificationDetails(
-        'mailcontrol_new_mail',
-        '新邮件提醒',
-        channelDescription: '收到新邮件时弹出系统通知',
-        importance: Importance.max,
-        priority: Priority.high,
-      );
-      const windowsDetails = WindowsNotificationDetails();
-      const details = NotificationDetails(
-        android: androidDetails,
-        windows: windowsDetails,
-      );
-      await _plugin.show(
-        id: id,
-        title: title,
-        body: body,
-        notificationDetails: details,
-        payload: payload,
-      );
+      if (Platform.isWindows) {
+        await _winChannel.invokeMethod<void>('show', {
+          'title': title,
+          'body': body,
+          'payload': payload ?? '',
+        });
+        return;
+      }
+
+      if (Platform.isAndroid) {
+        const androidDetails = AndroidNotificationDetails(
+          'mailcontrol_new_mail',
+          '新邮件提醒',
+          channelDescription: '收到新邮件时弹出系统通知',
+          importance: Importance.max,
+          priority: Priority.high,
+        );
+        const details = NotificationDetails(android: androidDetails);
+        await _plugin.show(
+          id,
+          title,
+          body,
+          details,
+          payload: payload,
+        );
+      }
     } catch (_) {}
   }
 }
