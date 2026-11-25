@@ -45,6 +45,7 @@ dependencies:
   url_launcher: ^6.3.3
   intl: ^0.20.3
   path: ^1.9.1
+  window_manager: ^0.7.1
 
 dev_dependencies:
   flutter_test:

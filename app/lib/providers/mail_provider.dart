@@ -25,6 +25,7 @@ class AuthState {
   final bool initialized;
   final bool loading;
   final String baseUrl;
+  final List<String> savedServers;
   final String? token;
   final AppUser? user;
   final ThemeMode themeMode;
@@ -34,6 +35,7 @@ class AuthState {
     this.initialized = false,
     this.loading = false,
     this.baseUrl = 'http://127.0.0.1:8080',
+    this.savedServers = const ['http://127.0.0.1:8080'],
     this.token,
     this.user,
     this.themeMode = ThemeMode.system,
@@ -46,6 +48,7 @@ class AuthState {
     bool? initialized,
     bool? loading,
     String? baseUrl,
+    List<String>? savedServers,
     String? token,
     bool clearToken = false,
     AppUser? user,
@@ -58,6 +61,7 @@ class AuthState {
         initialized: initialized ?? this.initialized,
         loading: loading ?? this.loading,
         baseUrl: baseUrl ?? this.baseUrl,
+        savedServers: savedServers ?? this.savedServers,
         token: clearToken ? null : (token ?? this.token),
         user: clearUser ? null : (user ?? this.user),
         themeMode: themeMode ?? this.themeMode,
@@ -67,6 +71,7 @@ class AuthState {
 
 class AuthNotifier extends Notifier<AuthState> {
   static const _kBaseUrl = 'mailcontrol_base_url';
+  static const _kSavedServers = 'mailcontrol_saved_servers';
   static const _kToken = 'mailcontrol_token';
   static const _kTheme = 'mailcontrol_theme';
 
@@ -79,6 +84,14 @@ class AuthNotifier extends Notifier<AuthState> {
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     final savedUrl = prefs.getString(_kBaseUrl) ?? 'http://127.0.0.1:8080';
+    final rawServers = prefs.getStringList(_kSavedServers) ?? const [];
+    final serverList = <String>[
+      savedUrl,
+      for (final s in rawServers)
+        if (s.trim().isNotEmpty && s.trim() != savedUrl) s.trim(),
+      if (savedUrl != 'http://127.0.0.1:8080' && !rawServers.contains('http://127.0.0.1:8080'))
+        'http://127.0.0.1:8080',
+    ];
     final savedToken = prefs.getString(_kToken);
     final savedTheme = prefs.getString(_kTheme) ?? 'system';
 
@@ -107,6 +120,7 @@ class AuthNotifier extends Notifier<AuthState> {
     state = state.copyWith(
       initialized: true,
       baseUrl: savedUrl,
+      savedServers: serverList,
       token: validToken,
       clearToken: validToken == null,
       user: user,
@@ -117,10 +131,33 @@ class AuthNotifier extends Notifier<AuthState> {
 
   Future<void> setBaseUrl(String url) async {
     final normalized = url.trim().replaceAll(RegExp(r'/+$'), '');
+    if (normalized.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kBaseUrl, normalized);
     ref.read(apiClientProvider).configure(baseUrl: normalized, token: state.token);
     state = state.copyWith(baseUrl: normalized, clearError: true);
+  }
+
+  Future<void> rememberServer(String url) async {
+    final normalized = url.trim().replaceAll(RegExp(r'/+$'), '');
+    if (normalized.isEmpty) return;
+    final next = <String>[
+      normalized,
+      for (final s in state.savedServers)
+        if (s != normalized) s,
+    ];
+    if (next.length > 8) next.removeRange(8, next.length);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_kSavedServers, next);
+    state = state.copyWith(savedServers: next);
+  }
+
+  Future<void> removeSavedServer(String url) async {
+    final next = state.savedServers.where((s) => s != url).toList();
+    if (next.isEmpty) next.add('http://127.0.0.1:8080');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_kSavedServers, next);
+    state = state.copyWith(savedServers: next);
   }
 
   Future<void> toggleTheme() async {
@@ -139,6 +176,7 @@ class AuthNotifier extends Notifier<AuthState> {
       api.configure(baseUrl: state.baseUrl, token: res.token);
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_kToken, res.token);
+      await rememberServer(state.baseUrl);
       state = state.copyWith(loading: false, token: res.token, user: res.user);
       return true;
     } catch (e) {
@@ -156,6 +194,7 @@ class AuthNotifier extends Notifier<AuthState> {
       api.configure(baseUrl: state.baseUrl, token: res.token);
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_kToken, res.token);
+      await rememberServer(state.baseUrl);
       state = state.copyWith(loading: false, token: res.token, user: res.user);
       return true;
     } catch (e) {

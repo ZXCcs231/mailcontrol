@@ -48,11 +48,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     final url = _serverCtrl.text.trim();
     await ref.read(authProvider.notifier).setBaseUrl(url);
     final ok = await ref.read(apiClientProvider).checkHealth(url);
+    if (ok) {
+      await ref.read(authProvider.notifier).rememberServer(url);
+    }
     if (!mounted) return;
     setState(() {
       _checkingServer = false;
       _serverOk = ok;
-      _serverStatus = ok ? '后端服务连接正常' : '无法连接到该地址，请确认后端已启动或端口已放行';
+      _serverStatus = ok ? '后端服务连接正常（已记录到常用地址）' : '无法连接到该地址，请确认后端已启动或端口已放行';
     });
   }
 
@@ -74,6 +77,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     }
     _serverCtrl.text = 'http://127.0.0.1:8080';
     await _checkServer();
+    if (mounted && _serverOk) {
+      setState(() {
+        _serverStatus = '本地服务连接正常（提示：本地数据库与云端账号相互独立，首次使用请先注册本地账号）';
+      });
+    }
   }
 
   Future<void> _submit() async {
@@ -311,10 +319,43 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 TextField(
                   controller: _serverCtrl,
                   decoration: const InputDecoration(
-                    hintText: 'http://服务器IP:18080',
+                    hintText: 'http://服务器IP:18080 或 https://域名',
                     isDense: true,
                   ),
                 ),
+                if (auth.savedServers.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text('常用地址（点击快速切换）', style: TextStyle(fontSize: 11.5, color: p.textMuted)),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final s in auth.savedServers)
+                        InputChip(
+                          label: Text(
+                            s,
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: s == auth.baseUrl ? FontWeight.w600 : FontWeight.w400,
+                              color: s == auth.baseUrl ? p.accent : p.textPrimary,
+                            ),
+                          ),
+                          selected: s == auth.baseUrl,
+                          showCheckmark: false,
+                          selectedColor: p.accentSoft,
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () {
+                            _serverCtrl.text = s;
+                            _checkServer();
+                          },
+                          onDeleted: auth.savedServers.length > 1
+                              ? () => ref.read(authProvider.notifier).removeSavedServer(s)
+                              : null,
+                        ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 8,

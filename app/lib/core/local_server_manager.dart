@@ -10,7 +10,6 @@ class LocalServerManager {
 
   String? findServerExecutable() {
     if (!Platform.isWindows) return null;
-
     final exeDir = File(Platform.resolvedExecutable).parent.path;
     final candidates = <String>[
       p.join(exeDir, 'mailcontrol-server.exe'),
@@ -19,7 +18,6 @@ class LocalServerManager {
       p.join(Directory.current.parent.path, 'backend', 'mailcontrol-server.exe'),
     ];
 
-    // 从可执行文件目录向上最多查找 6 层，兼容从 app/build/... 调试运行
     var cursor = Directory(exeDir);
     for (var i = 0; i < 6; i++) {
       candidates.add(p.join(cursor.path, 'backend', 'mailcontrol-server.exe'));
@@ -34,16 +32,33 @@ class LocalServerManager {
     return null;
   }
 
+  String _resolveDataDir(String exePath) {
+    final exeDir = File(exePath).parent.path;
+    final localDb = File(p.join(exeDir, 'data', 'mailcontrol.db'));
+    if (localDb.existsSync()) {
+      return p.join(exeDir, 'data');
+    }
+    final appData = Platform.environment['LOCALAPPDATA'];
+    if (appData != null && appData.isNotEmpty) {
+      final dir = Directory(p.join(appData, 'MailControl', 'local_data'));
+      if (!dir.existsSync()) dir.createSync(recursive: true);
+      return dir.path;
+    }
+    return p.join(exeDir, 'data');
+  }
+
   Future<bool> startIfNeeded() async {
     if (!Platform.isWindows) return false;
     final exe = findServerExecutable();
     if (exe == null) return false;
 
     final workDir = File(exe).parent.path;
+    final dataDir = _resolveDataDir(exe);
     _process = await Process.start(
       exe,
       const [],
       workingDirectory: workDir,
+      environment: {'DATA_DIR': dataDir},
       mode: ProcessStartMode.detachedWithStdio,
     );
     await Future.delayed(const Duration(milliseconds: 900));
