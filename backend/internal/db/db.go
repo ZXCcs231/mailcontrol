@@ -173,6 +173,7 @@ CREATE TABLE IF NOT EXISTS message_translations (
 	provider TEXT NOT NULL DEFAULT '',
 	translated_subject TEXT NOT NULL DEFAULT '',
 	translated_text TEXT NOT NULL DEFAULT '',
+	translated_html TEXT NOT NULL DEFAULT '',
 	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	UNIQUE(message_id, target_lang),
 	FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE
@@ -199,6 +200,7 @@ CREATE INDEX IF NOT EXISTS idx_rules_user ON rules(user_id, enabled, priority);
 	// 平滑迁移已有数据库表列
 	_, _ = conn.Exec(`ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0`)
 	_, _ = conn.Exec(`ALTER TABLE users ADD COLUMN is_disabled INTEGER NOT NULL DEFAULT 0`)
+	_, _ = conn.Exec(`ALTER TABLE message_translations ADD COLUMN translated_html TEXT NOT NULL DEFAULT ''`)
 	_, _ = conn.Exec(`
 		UPDATE users SET is_admin = 1
 		WHERE id = (SELECT MIN(id) FROM users)

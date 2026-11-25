@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/email_html_normalizer.dart';
+import '../core/email_html_translator.dart';
 import '../core/theme.dart';
 import '../models/models.dart';
 import '../providers/mail_provider.dart';
@@ -34,11 +35,10 @@ class MessageDetailView extends ConsumerStatefulWidget {
 }
 
 class _MessageDetailViewState extends ConsumerState<MessageDetailView> {
-  bool _preferPlain = false;
   bool _forceLightPaper = false;
   int? _downloadingAttId;
   bool _translating = false;
-  bool _onlyTranslation = false;
+  bool _showTranslated = true;
   int? _lastMsgId;
   MessageTranslation? _translation;
   String? _lastRawHtml;
@@ -58,10 +58,30 @@ class _MessageDetailViewState extends ConsumerState<MessageDetailView> {
   Future<void> _translate(MailMessage msg, String targetLang, {bool force = false}) async {
     setState(() => _translating = true);
     try {
-      final res = await ref.read(apiClientProvider).translateMessage(msg.id, targetLang, force: force);
+      final api = ref.read(apiClientProvider);
+      var res = await api.translateMessage(msg.id, targetLang, force: force);
+      if (msg.bodyHtml.isNotEmpty && res.translatedHtml.trim().isEmpty) {
+        final inPlaceHtml = await translateHtmlInPlace(
+          rawHtml: msg.bodyHtml,
+          translateBatch: (batch) async {
+            final t = await api.translateText(text: batch, targetLang: targetLang);
+            return t.translatedText;
+          },
+        );
+        res = MessageTranslation(
+          messageId: res.messageId,
+          targetLang: res.targetLang,
+          provider: res.provider,
+          translatedSubject: res.translatedSubject,
+          translatedText: res.translatedText,
+          translatedHtml: inPlaceHtml,
+          cached: res.cached,
+        );
+      }
       if (mounted) {
         setState(() {
           _translation = res;
+          _showTranslated = true;
           _translating = false;
         });
       }
@@ -150,7 +170,7 @@ class _MessageDetailViewState extends ConsumerState<MessageDetailView> {
     if (_lastMsgId != msg.id) {
       _lastMsgId = msg.id;
       _translation = null;
-      _onlyTranslation = false;
+      _showTranslated = true;
       _forceLightPaper = false;
     }
 
@@ -304,24 +324,20 @@ class _MessageDetailViewState extends ConsumerState<MessageDetailView> {
                           children: [
                             Expanded(
                               child: SelectableText(
-                                msg.subject,
+                                (_translation != null && _showTranslated && _translation!.translatedSubject.isNotEmpty)
+                                    ? _translation!.translatedSubject
+                                    : msg.subject,
                                 style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 20, height: 1.35),
                               ),
                             ),
-                            if (msg.bodyHtml.isNotEmpty) ...[
-                              if (isDark && !_preferPlain)
-                                TextButton(
-                                  onPressed: () => setState(() => _forceLightPaper = !_forceLightPaper),
-                                  child: Text(
-                                    _forceLightPaper ? '深色正文' : '浅色信纸',
-                                    style: const TextStyle(fontSize: 12.5),
-                                  ),
-                                ),
+                            if (msg.bodyHtml.isNotEmpty && isDark)
                               TextButton(
-                                onPressed: () => setState(() => _preferPlain = !_preferPlain),
-                                child: Text(_preferPlain ? '切换 HTML' : '纯文本', style: const TextStyle(fontSize: 12.5)),
+                                onPressed: () => setState(() => _forceLightPaper = !_forceLightPaper),
+                                child: Text(
+                                  _forceLightPaper ? '深色正文' : '浅色信纸',
+                                  style: const TextStyle(fontSize: 12.5),
+                                ),
                               ),
-                            ],
                           ],
                         ),
                         const SizedBox(height: 16),
@@ -418,139 +434,125 @@ class _MessageDetailViewState extends ConsumerState<MessageDetailView> {
                             child: Divider(color: pal.borderSubtle),
                           ),
                         ],
-                        if (_translation != null) ...[
+                        if (_translation != null)
                           Container(
                             width: double.infinity,
-                            margin: const EdgeInsets.only(bottom: 18),
-                            padding: const EdgeInsets.all(16),
+                            margin: const EdgeInsets.only(bottom: 14),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                             decoration: BoxDecoration(
                               color: pal.accentSoft,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: pal.accent.withValues(alpha: 0.28)),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: pal.accent.withValues(alpha: 0.22)),
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            child: Row(
                               children: [
-                                Row(
-                                  children: [
-                                    Icon(Icons.translate_rounded, size: 17, color: pal.accent),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        '译文（${_langName(_translation!.targetLang)} · ${_translation!.provider}${_translation!.cached ? " · 已缓存" : ""}）',
-                                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: pal.accent),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    TextButton(
-                                      onPressed: () => setState(() => _onlyTranslation = !_onlyTranslation),
-                                      child: Text(_onlyTranslation ? '显示原文' : '仅看译文', style: const TextStyle(fontSize: 12)),
-                                    ),
-                                    IconButton(
-                                      tooltip: '重新翻译',
-                                      icon: const Icon(Icons.refresh_rounded, size: 17),
-                                      visualDensity: VisualDensity.compact,
-                                      onPressed: _translating ? null : () => _translate(msg, _translation!.targetLang, force: true),
-                                    ),
-                                    IconButton(
-                                      tooltip: '关闭译文',
-                                      icon: const Icon(Icons.close_rounded, size: 17),
-                                      visualDensity: VisualDensity.compact,
-                                      onPressed: () => setState(() {
-                                        _translation = null;
-                                        _onlyTranslation = false;
-                                      }),
-                                    ),
-                                  ],
+                                Icon(Icons.translate_rounded, size: 15, color: pal.accent),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    _showTranslated
+                                        ? '已译为${_langName(_translation!.targetLang)} · ${_translation!.provider}${_translation!.cached ? " · 已缓存" : ""}'
+                                        : '当前显示原文（已有${_langName(_translation!.targetLang)}译文）',
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: pal.accent),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
-                                if (_translation!.translatedSubject.isNotEmpty) ...[
-                                  const SizedBox(height: 6),
-                                  SelectableText(
-                                    '主题：${_translation!.translatedSubject}',
-                                    style: TextStyle(
-                                      fontSize: 14.5,
-                                      fontWeight: FontWeight.w700,
-                                      color: pal.textPrimary,
-                                      fontFamily: AppTheme.fontFamily,
-                                      fontFamilyFallback: AppTheme.fontFallback,
-                                    ),
+                                TextButton(
+                                  style: TextButton.styleFrom(
+                                    visualDensity: VisualDensity.compact,
+                                    padding: const EdgeInsets.symmetric(horizontal: 8),
                                   ),
-                                ],
-                                if (_translation!.translatedText.isNotEmpty) ...[
-                                  const SizedBox(height: 8),
-                                  SelectableText(
-                                    _translation!.translatedText,
-                                    style: TextStyle(
-                                      fontSize: 14.5,
-                                      height: 1.68,
-                                      color: pal.textPrimary,
-                                      fontFamily: AppTheme.fontFamily,
-                                      fontFamilyFallback: AppTheme.fontFallback,
-                                    ),
-                                  ),
-                                ],
+                                  onPressed: () => setState(() => _showTranslated = !_showTranslated),
+                                  child: Text(_showTranslated ? '查看原文' : '查看译文', style: const TextStyle(fontSize: 12)),
+                                ),
+                                IconButton(
+                                  tooltip: '重新翻译',
+                                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: _translating ? null : () => _translate(msg, _translation!.targetLang, force: true),
+                                ),
+                                IconButton(
+                                  tooltip: '关闭译文',
+                                  icon: const Icon(Icons.close_rounded, size: 16),
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: () => setState(() {
+                                    _translation = null;
+                                    _showTranslated = true;
+                                  }),
+                                ),
                               ],
                             ),
                           ),
-                        ],
-                        if (!_onlyTranslation) ...[
-                          if (!_preferPlain && msg.bodyHtml.isNotEmpty)
-                            Builder(
-                              builder: (context) {
-                                final useLightPaper = isDark && _forceLightPaper;
-                                final useDarkHtml = isDark && !_forceLightPaper;
-                                final bodyWidget = SelectionArea(
-                                  child: SizedBox(
-                                    width: double.infinity,
-                                    child: HtmlWidget(
-                                      _getNormalizedHtml(msg.bodyHtml, darkMode: useDarkHtml),
-                                      textStyle: TextStyle(
-                                        fontSize: 14.5,
-                                        height: 1.68,
-                                        color: useLightPaper ? const Color(0xFF0F172A) : pal.textPrimary,
-                                        fontFamily: AppTheme.fontFamily,
-                                        fontFamilyFallback: AppTheme.fontFallback,
-                                      ),
-                                      customStylesBuilder: (element) {
-                                        if (element.localName == 'img') {
-                                          return const {'max-width': '100%'};
-                                        }
-                                        return null;
-                                      },
-                                      onTapUrl: (url) async {
-                                        final uri = Uri.tryParse(url);
-                                        if (uri != null) {
-                                          await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                        }
-                                        return true;
-                                      },
-                                    ),
-                                  ),
-                                );
-                                if (!useLightPaper) return bodyWidget;
-                                return Container(
+                        if (msg.bodyHtml.isNotEmpty)
+                          Builder(
+                            builder: (context) {
+                              final useLightPaper = isDark && _forceLightPaper;
+                              final useDarkHtml = isDark && !_forceLightPaper;
+                              final activeHtml = (_translation != null &&
+                                      _showTranslated &&
+                                      _translation!.translatedHtml.isNotEmpty)
+                                  ? _translation!.translatedHtml
+                                  : msg.bodyHtml;
+                              final bodyWidget = SelectionArea(
+                                child: SizedBox(
                                   width: double.infinity,
-                                  padding: const EdgeInsets.all(16),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFFFFFF),
-                                    borderRadius: BorderRadius.circular(12),
+                                  child: HtmlWidget(
+                                    _getNormalizedHtml(activeHtml, darkMode: useDarkHtml),
+                                    textStyle: TextStyle(
+                                      fontSize: 14.5,
+                                      height: 1.68,
+                                      color: useLightPaper ? const Color(0xFF0F172A) : pal.textPrimary,
+                                      fontFamily: AppTheme.fontFamily,
+                                      fontFamilyFallback: AppTheme.fontFallback,
+                                    ),
+                                    customStylesBuilder: (element) {
+                                      if (element.localName == 'img') {
+                                        return const {'max-width': '100%'};
+                                      }
+                                      return null;
+                                    },
+                                    onTapUrl: (url) async {
+                                      final uri = Uri.tryParse(url);
+                                      if (uri != null) {
+                                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                      }
+                                      return true;
+                                    },
                                   ),
-                                  child: bodyWidget,
-                                );
-                              },
-                            )
-                          else
-                            SelectableText(
-                              msg.bodyText.isNotEmpty ? msg.bodyText : '（邮件正文为空）',
-                              style: TextStyle(
-                                fontSize: 14.5,
-                                height: 1.68,
-                                color: pal.textPrimary,
-                                fontFamily: AppTheme.fontFamily,
-                                fontFamilyFallback: AppTheme.fontFallback,
-                              ),
-                            ),
-                        ],
+                                ),
+                              );
+                              if (!useLightPaper) return bodyWidget;
+                              return Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFFFFF),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: bodyWidget,
+                              );
+                            },
+                          )
+                        else
+                          Builder(
+                            builder: (context) {
+                              final activePlain = (_translation != null &&
+                                      _showTranslated &&
+                                      _translation!.translatedText.isNotEmpty)
+                                  ? _translation!.translatedText
+                                  : (msg.bodyText.isNotEmpty ? msg.bodyText : '（邮件正文为空）');
+                              return SelectableText(
+                                activePlain,
+                                style: TextStyle(
+                                  fontSize: 14.5,
+                                  height: 1.68,
+                                  color: pal.textPrimary,
+                                  fontFamily: AppTheme.fontFamily,
+                                  fontFamilyFallback: AppTheme.fontFallback,
+                                ),
+                              );
+                            },
+                          ),
                       ],
                     ),
                   ),

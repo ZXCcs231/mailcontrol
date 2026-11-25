@@ -492,6 +492,7 @@ class MessageTranslation {
   final String provider;
   final String translatedSubject;
   final String translatedText;
+  final String translatedHtml;
   final bool cached;
 
   MessageTranslation({
@@ -500,6 +501,7 @@ class MessageTranslation {
     required this.provider,
     required this.translatedSubject,
     required this.translatedText,
+    this.translatedHtml = '',
     this.cached = false,
   });
 
@@ -509,6 +511,7 @@ class MessageTranslation {
         provider: _asStr(j['provider']),
         translatedSubject: _asStr(j['translated_subject']),
         translatedText: _asStr(j['translated_text']),
+        translatedHtml: _asStr(j['translated_html']),
         cached: _asBool(j['cached']),
       );
 }

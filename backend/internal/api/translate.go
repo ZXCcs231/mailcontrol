@@ -64,19 +64,21 @@ func (s *Server) TranslateMessage(c *gin.Context) {
 	}
 
 	if !req.Force {
-		var provider, tSub, tText string
+		var provider, tSub, tText, tHTML string
 		err := s.DB.QueryRow(`
-			SELECT provider, translated_subject, translated_text
+			SELECT provider, translated_subject, translated_text, translated_html
 			FROM message_translations
 			WHERE message_id = ? AND target_lang = ?`, msgID, targetLang,
-		).Scan(&provider, &tSub, &tText)
-		if err == nil && (tText != "" || tSub != "") {
+		).Scan(&provider, &tSub, &tText, &tHTML)
+		hasHTML := strings.TrimSpace(bodyHTML) != ""
+		if err == nil && (tText != "" || tSub != "") && (!hasHTML || strings.TrimSpace(tHTML) != "") {
 			c.JSON(http.StatusOK, gin.H{
 				"message_id":         msgID,
 				"target_lang":        targetLang,
 				"provider":           provider,
 				"translated_subject": tSub,
 				"translated_text":    tText,
+				"translated_html":    tHTML,
 				"cached":             true,
 			})
 			return
@@ -89,7 +91,7 @@ func (s *Server) TranslateMessage(c *gin.Context) {
 	}
 
 	tr := s.getTranslator()
-	var tSub, tText, usedProvider string
+	var tSub, tText, tHTML, usedProvider string
 
 	if strings.TrimSpace(subject) != "" && subject != "（无主题）" {
 		outSub, prov, err := tr.TranslateText(c.Request.Context(), subject, targetLang)
@@ -98,7 +100,18 @@ func (s *Server) TranslateMessage(c *gin.Context) {
 			usedProvider = prov
 		}
 	}
-	if plain != "" {
+	if strings.TrimSpace(bodyHTML) != "" {
+		outHTML, prov, err := tr.TranslateHTML(c.Request.Context(), bodyHTML, targetLang)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "翻译失败：" + err.Error()})
+			return
+		}
+		tHTML = outHTML
+		if prov != "" {
+			usedProvider = prov
+		}
+		tText = cleanHTMLForTranslate(tHTML)
+	} else if plain != "" {
 		outText, prov, err := tr.TranslateText(c.Request.Context(), plain, targetLang)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "翻译失败：" + err.Error()})
@@ -112,14 +125,15 @@ func (s *Server) TranslateMessage(c *gin.Context) {
 	}
 
 	_, _ = s.DB.Exec(`
-		INSERT INTO message_translations (message_id, target_lang, provider, translated_subject, translated_text)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO message_translations (message_id, target_lang, provider, translated_subject, translated_text, translated_html)
+		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(message_id, target_lang) DO UPDATE SET
 			provider = excluded.provider,
 			translated_subject = excluded.translated_subject,
 			translated_text = excluded.translated_text,
+			translated_html = excluded.translated_html,
 			created_at = CURRENT_TIMESTAMP`,
-		msgID, targetLang, usedProvider, tSub, tText,
+		msgID, targetLang, usedProvider, tSub, tText, tHTML,
 	)
 
 	c.JSON(http.StatusOK, gin.H{
@@ -128,6 +142,7 @@ func (s *Server) TranslateMessage(c *gin.Context) {
 		"provider":           usedProvider,
 		"translated_subject": tSub,
 		"translated_text":    tText,
+		"translated_html":    tHTML,
 		"cached":             false,
 	})
 }
