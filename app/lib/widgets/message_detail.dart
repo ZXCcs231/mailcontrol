@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../core/email_html_normalizer.dart';
 import '../core/theme.dart';
 import '../models/models.dart';
 import '../providers/mail_provider.dart';
@@ -39,6 +40,15 @@ class _MessageDetailViewState extends ConsumerState<MessageDetailView> {
   bool _onlyTranslation = false;
   int? _lastMsgId;
   MessageTranslation? _translation;
+  String? _lastRawHtml;
+  String _cachedNormalizedHtml = '';
+
+  String _getNormalizedHtml(String rawHtml) {
+    if (_lastRawHtml == rawHtml) return _cachedNormalizedHtml;
+    _lastRawHtml = rawHtml;
+    _cachedNormalizedHtml = normalizeEmailHtml(rawHtml);
+    return _cachedNormalizedHtml;
+  }
 
   Future<void> _translate(MailMessage msg, String targetLang, {bool force = false}) async {
     setState(() => _translating = true);
@@ -461,16 +471,25 @@ class _MessageDetailViewState extends ConsumerState<MessageDetailView> {
                         if (!_onlyTranslation) ...[
                           if (!_preferPlain && msg.bodyHtml.isNotEmpty)
                             SelectionArea(
-                              child: HtmlWidget(
-                                msg.bodyHtml,
-                                textStyle: TextStyle(fontSize: 14.5, height: 1.68, color: pal.textPrimary),
-                                onTapUrl: (url) async {
-                                  final uri = Uri.tryParse(url);
-                                  if (uri != null) {
-                                    await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                  }
-                                  return true;
-                                },
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: HtmlWidget(
+                                  _getNormalizedHtml(msg.bodyHtml),
+                                  textStyle: TextStyle(fontSize: 14.5, height: 1.68, color: pal.textPrimary),
+                                  customStylesBuilder: (element) {
+                                    if (element.localName == 'img') {
+                                      return const {'max-width': '100%'};
+                                    }
+                                    return null;
+                                  },
+                                  onTapUrl: (url) async {
+                                    final uri = Uri.tryParse(url);
+                                    if (uri != null) {
+                                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                    }
+                                    return true;
+                                  },
+                                ),
                               ),
                             )
                           else

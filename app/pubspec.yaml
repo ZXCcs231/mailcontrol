@@ -46,6 +46,7 @@ dependencies:
   intl: ^0.20.3
   path: ^1.9.1
   window_manager: ^0.7.1
+  html: ^0.15.7
 
 dev_dependencies:
   flutter_test:
