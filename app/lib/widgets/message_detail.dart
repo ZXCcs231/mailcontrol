@@ -12,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/theme.dart';
 import '../models/models.dart';
 import '../providers/mail_provider.dart';
+import 'brand_widgets.dart';
 
 class MessageDetailView extends ConsumerStatefulWidget {
   final MailMessage? message;
@@ -99,20 +100,31 @@ class _MessageDetailViewState extends ConsumerState<MessageDetailView> {
     final mail = ref.watch(mailProvider);
     final notifier = ref.read(mailProvider.notifier);
     final msg = widget.message ?? mail.selectedMessage;
+    final pal = context.palette;
     final scheme = Theme.of(context).colorScheme;
 
     if (mail.loadingDetail && msg == null) {
-      return const Center(child: CircularProgressIndicator());
+      return Container(color: pal.readingBg, child: const Center(child: CircularProgressIndicator()));
     }
     if (msg == null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.mail_outline_rounded, size: 56, color: scheme.outline),
-            const SizedBox(height: 12),
-            Text('选择一封邮件开始阅读', style: TextStyle(fontSize: 15, color: scheme.onSurfaceVariant)),
-          ],
+      return Container(
+        color: pal.readingBg,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 68,
+                height: 68,
+                decoration: BoxDecoration(color: pal.accentSoft, shape: BoxShape.circle),
+                child: Icon(Icons.mail_outline_rounded, size: 34, color: pal.accent),
+              ),
+              const SizedBox(height: 14),
+              Text('选择一封邮件开始阅读', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: pal.textPrimary)),
+              const SizedBox(height: 4),
+              Text('支持 HTML 富文本预览、附件下载及一键多语种翻译', style: TextStyle(fontSize: 12.5, color: pal.textMuted)),
+            ],
+          ),
         ),
       );
     }
@@ -125,335 +137,389 @@ class _MessageDetailViewState extends ConsumerState<MessageDetailView> {
       _onlyTranslation = false;
     }
 
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: Theme.of(context).dividerTheme.color ?? scheme.outlineVariant)),
-          ),
-          child: Row(
-            children: [
-              if (widget.isStandalone)
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.arrow_back_rounded),
-                ),
-              if (msg.isDraft)
-                FilledButton.tonalIcon(
-                  onPressed: () => widget.onReplyOrForward(msg, 'draft'),
-                  icon: const Icon(Icons.edit_outlined, size: 17),
-                  label: const Text('继续编辑草稿'),
-                )
-              else ...[
-                IconButton(
-                  tooltip: '回复',
-                  onPressed: () => widget.onReplyOrForward(msg, 'reply'),
-                  icon: const Icon(Icons.reply_rounded),
-                ),
-                IconButton(
-                  tooltip: '回复全部',
-                  onPressed: () => widget.onReplyOrForward(msg, 'reply_all'),
-                  icon: const Icon(Icons.reply_all_rounded),
-                ),
-                IconButton(
-                  tooltip: '转发',
-                  onPressed: () => widget.onReplyOrForward(msg, 'forward'),
-                  icon: const Icon(Icons.forward_rounded),
-                ),
-              ],
-              const Spacer(),
-              PopupMenuButton<String>(
-                tooltip: '翻译邮件',
-                enabled: !_translating,
-                icon: _translating
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.translate_rounded),
-                onSelected: (lang) => _translate(msg, lang),
-                itemBuilder: (_) => [
-                  for (final lang in kTranslateLanguages)
-                    PopupMenuItem<String>(
-                      value: lang.code,
-                      child: Row(
-                        children: [
-                          if (_translation?.targetLang == lang.code)
-                            Icon(Icons.check_rounded, size: 16, color: scheme.primary)
-                          else
-                            const SizedBox(width: 16),
-                          const SizedBox(width: 8),
-                          Text('翻译为 ${lang.name}'),
-                        ],
-                      ),
-                    ),
+    return Container(
+      color: pal.readingBg,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: pal.listBg,
+              border: Border(bottom: BorderSide(color: pal.borderSubtle)),
+            ),
+            child: Row(
+              children: [
+                if (widget.isStandalone)
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.arrow_back_rounded),
+                  ),
+                if (msg.isDraft)
+                  FilledButton.tonalIcon(
+                    onPressed: () => widget.onReplyOrForward(msg, 'draft'),
+                    icon: const Icon(Icons.edit_outlined, size: 17),
+                    label: const Text('继续编辑草稿'),
+                  )
+                else ...[
+                  _ToolbarButton(
+                    tooltip: '回复',
+                    icon: Icons.reply_rounded,
+                    label: widget.isStandalone ? null : '回复',
+                    onTap: () => widget.onReplyOrForward(msg, 'reply'),
+                  ),
+                  const SizedBox(width: 4),
+                  _ToolbarButton(
+                    tooltip: '回复全部',
+                    icon: Icons.reply_all_rounded,
+                    onTap: () => widget.onReplyOrForward(msg, 'reply_all'),
+                  ),
+                  const SizedBox(width: 4),
+                  _ToolbarButton(
+                    tooltip: '转发',
+                    icon: Icons.forward_rounded,
+                    label: widget.isStandalone ? null : '转发',
+                    onTap: () => widget.onReplyOrForward(msg, 'forward'),
+                  ),
                 ],
-              ),
-              IconButton(
-                tooltip: msg.isStarred ? '取消星标' : '加星标',
-                onPressed: () => notifier.toggleStar(msg),
-                icon: Icon(
-                  msg.isStarred ? Icons.star_rounded : Icons.star_outline_rounded,
-                  color: msg.isStarred ? Colors.amber.shade600 : null,
-                ),
-              ),
-              IconButton(
-                tooltip: msg.isRead ? '标为未读' : '标为已读',
-                onPressed: () => notifier.toggleRead(msg),
-                icon: Icon(msg.isRead ? Icons.mark_email_unread_outlined : Icons.mark_email_read_outlined),
-              ),
-              if (mail.tags.isNotEmpty)
-                PopupMenuButton<int>(
-                  tooltip: '打标签',
-                  icon: const Icon(Icons.label_outline_rounded),
-                  onSelected: (tagId) {
-                    final has = msg.tags.any((t) => t.id == tagId);
-                    notifier.toggleMessageTag(msg.id, tagId, has);
-                  },
+                const Spacer(),
+                PopupMenuButton<String>(
+                  tooltip: '翻译邮件',
+                  enabled: !_translating,
+                  icon: _translating
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : Icon(Icons.translate_rounded, color: _translation != null ? pal.accent : pal.textSecondary),
+                  onSelected: (lang) => _translate(msg, lang),
                   itemBuilder: (_) => [
-                    for (final tag in mail.tags)
-                      CheckedPopupMenuItem<int>(
-                        value: tag.id,
-                        checked: msg.tags.any((t) => t.id == tag.id),
+                    for (final lang in kTranslateLanguages)
+                      PopupMenuItem<String>(
+                        value: lang.code,
                         child: Row(
                           children: [
-                            Container(
-                              width: 10,
-                              height: 10,
-                              decoration: BoxDecoration(color: parseHexColor(tag.color), shape: BoxShape.circle),
-                            ),
+                            if (_translation?.targetLang == lang.code)
+                              Icon(Icons.check_rounded, size: 16, color: pal.accent)
+                            else
+                              const SizedBox(width: 16),
                             const SizedBox(width: 8),
-                            Text(tag.name),
+                            Text('翻译为 ${lang.name}'),
                           ],
                         ),
                       ),
                   ],
                 ),
-              IconButton(
-                tooltip: '归档',
-                onPressed: () async {
-                  await notifier.moveMessage(msg.id, 'archive');
-                  widget.onDeleted?.call();
-                },
-                icon: const Icon(Icons.archive_outlined),
-              ),
-              IconButton(
-                tooltip: '删除',
-                onPressed: () async {
-                  await notifier.deleteMessage(msg.id);
-                  widget.onDeleted?.call();
-                },
-                icon: Icon(Icons.delete_outline_rounded, color: scheme.error),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: SelectableText(
-                        msg.subject,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    if (msg.bodyHtml.isNotEmpty)
-                      TextButton(
-                        onPressed: () => setState(() => _preferPlain = !_preferPlain),
-                        child: Text(_preferPlain ? '切换 HTML' : '纯文本'),
-                      ),
-                  ],
+                IconButton(
+                  tooltip: msg.isStarred ? '取消星标' : '加星标',
+                  onPressed: () => notifier.toggleStar(msg),
+                  icon: Icon(
+                    msg.isStarred ? Icons.star_rounded : Icons.star_outline_rounded,
+                    color: msg.isStarred ? Colors.amber.shade600 : pal.textSecondary,
+                  ),
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundColor: acctColor.withValues(alpha: 0.16),
-                      child: Text(
-                        msg.senderDisplay.isNotEmpty ? msg.senderDisplay.substring(0, 1).toUpperCase() : '?',
-                        style: TextStyle(color: acctColor, fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  msg.fromName.isNotEmpty ? '${msg.fromName} <${msg.fromAddr}>' : msg.fromAddr,
-                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                                ),
-                              ),
-                              Text(
-                                DateFormat('yyyy-MM-dd HH:mm').format(msg.receivedAt),
-                                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '收件人：${msg.toAddrs}',
-                            style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
-                          ),
-                          if (msg.ccAddrs.isNotEmpty)
-                            Text(
-                              '抄送：${msg.ccAddrs}',
-                              style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
-                            ),
-                          const SizedBox(height: 6),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 4,
+                IconButton(
+                  tooltip: msg.isRead ? '标为未读' : '标为已读',
+                  onPressed: () => notifier.toggleRead(msg),
+                  icon: Icon(
+                    msg.isRead ? Icons.mark_email_unread_outlined : Icons.mark_email_read_outlined,
+                    color: pal.textSecondary,
+                  ),
+                ),
+                if (mail.tags.isNotEmpty)
+                  PopupMenuButton<int>(
+                    tooltip: '打标签',
+                    icon: Icon(Icons.label_outline_rounded, color: pal.textSecondary),
+                    onSelected: (tagId) {
+                      final has = msg.tags.any((t) => t.id == tagId);
+                      notifier.toggleMessageTag(msg.id, tagId, has);
+                    },
+                    itemBuilder: (_) => [
+                      for (final tag in mail.tags)
+                        CheckedPopupMenuItem<int>(
+                          value: tag.id,
+                          checked: msg.tags.any((t) => t.id == tag.id),
+                          child: Row(
                             children: [
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: acctColor.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  '${msg.accountLabel} (${msg.accountEmail})',
-                                  style: TextStyle(fontSize: 11.5, color: acctColor, fontWeight: FontWeight.w600),
-                                ),
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(color: parseHexColor(tag.color), shape: BoxShape.circle),
                               ),
-                              for (final tag in msg.tags)
-                                Chip(
-                                  label: Text(tag.name, style: const TextStyle(fontSize: 11)),
-                                  backgroundColor: parseHexColor(tag.color).withValues(alpha: 0.14),
-                                  side: BorderSide.none,
-                                  visualDensity: VisualDensity.compact,
-                                  onDeleted: () => notifier.toggleMessageTag(msg.id, tag.id, true),
-                                ),
+                              const SizedBox(width: 8),
+                              Text(tag.name),
                             ],
                           ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Divider(),
-                ),
-                if (visibleAttachments.isNotEmpty) ...[
-                  Text('附件 (${visibleAttachments.length})', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final att in visibleAttachments)
-                        ActionChip(
-                          avatar: _downloadingAttId == att.id
-                              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                              : const Icon(Icons.download_rounded, size: 16),
-                          label: Text('${att.filename} (${_formatSize(att.size)})'),
-                          onPressed: _downloadingAttId == att.id ? null : () => _downloadAndOpen(att),
                         ),
                     ],
                   ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 14),
-                    child: Divider(),
-                  ),
-                ],
-                if (_translation != null) ...[
-                  Container(
+                IconButton(
+                  tooltip: '归档',
+                  onPressed: () async {
+                    await notifier.moveMessage(msg.id, 'archive');
+                    widget.onDeleted?.call();
+                  },
+                  icon: Icon(Icons.archive_outlined, color: pal.textSecondary),
+                ),
+                IconButton(
+                  tooltip: '删除',
+                  onPressed: () async {
+                    await notifier.deleteMessage(msg.id);
+                    widget.onDeleted?.call();
+                  },
+                  icon: Icon(Icons.delete_outline_rounded, color: scheme.error),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.all(widget.isStandalone ? 14 : 22),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 840),
+                  child: Container(
                     width: double.infinity,
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.all(14),
+                    padding: EdgeInsets.all(widget.isStandalone ? 18 : 26),
                     decoration: BoxDecoration(
-                      color: scheme.primaryContainer.withValues(alpha: 0.35),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: scheme.primary.withValues(alpha: 0.3)),
+                      color: pal.surfaceElevated,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: pal.borderSubtle),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(Icons.translate_rounded, size: 17, color: scheme.primary),
-                            const SizedBox(width: 6),
                             Expanded(
-                              child: Text(
-                                '译文（${_langName(_translation!.targetLang)} · ${_translation!.provider}${_translation!.cached ? " · 已缓存" : ""}）',
-                                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: scheme.primary),
-                                overflow: TextOverflow.ellipsis,
+                              child: SelectableText(
+                                msg.subject,
+                                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 20, height: 1.35),
                               ),
                             ),
-                            TextButton(
-                              onPressed: () => setState(() => _onlyTranslation = !_onlyTranslation),
-                              child: Text(_onlyTranslation ? '显示原文' : '仅看译文', style: const TextStyle(fontSize: 12)),
-                            ),
-                            IconButton(
-                              tooltip: '重新翻译',
-                              icon: const Icon(Icons.refresh_rounded, size: 17),
-                              visualDensity: VisualDensity.compact,
-                              onPressed: _translating ? null : () => _translate(msg, _translation!.targetLang, force: true),
-                            ),
-                            IconButton(
-                              tooltip: '关闭译文',
-                              icon: const Icon(Icons.close_rounded, size: 17),
-                              visualDensity: VisualDensity.compact,
-                              onPressed: () => setState(() {
-                                _translation = null;
-                                _onlyTranslation = false;
-                              }),
+                            if (msg.bodyHtml.isNotEmpty)
+                              TextButton(
+                                onPressed: () => setState(() => _preferPlain = !_preferPlain),
+                                child: Text(_preferPlain ? '切换 HTML' : '纯文本', style: const TextStyle(fontSize: 12.5)),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SenderAvatar(name: msg.senderDisplay, size: 42),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          msg.fromName.isNotEmpty ? '${msg.fromName} <${msg.fromAddr}>' : msg.fromAddr,
+                                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: pal.textPrimary),
+                                        ),
+                                      ),
+                                      Text(
+                                        DateFormat('yyyy-MM-dd HH:mm').format(msg.receivedAt),
+                                        style: TextStyle(fontSize: 12, color: pal.textMuted),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '收件人：${msg.toAddrs}',
+                                    style: TextStyle(fontSize: 12.5, color: pal.textSecondary),
+                                  ),
+                                  if (msg.ccAddrs.isNotEmpty)
+                                    Text(
+                                      '抄送：${msg.ccAddrs}',
+                                      style: TextStyle(fontSize: 12.5, color: pal.textSecondary),
+                                    ),
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: acctColor.withValues(alpha: 0.11),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          '${msg.accountLabel} (${msg.accountEmail})',
+                                          style: TextStyle(fontSize: 11.5, color: acctColor, fontWeight: FontWeight.w600),
+                                        ),
+                                      ),
+                                      for (final tag in msg.tags)
+                                        Chip(
+                                          label: Text(tag.name, style: const TextStyle(fontSize: 11)),
+                                          backgroundColor: parseHexColor(tag.color).withValues(alpha: 0.14),
+                                          side: BorderSide.none,
+                                          visualDensity: VisualDensity.compact,
+                                          onDeleted: () => notifier.toggleMessageTag(msg.id, tag.id, true),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
-                        if (_translation!.translatedSubject.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          SelectableText(
-                            '主题：${_translation!.translatedSubject}',
-                            style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          child: Divider(color: pal.borderSubtle),
+                        ),
+                        if (visibleAttachments.isNotEmpty) ...[
+                          Text(
+                            '附件 (${visibleAttachments.length})',
+                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: pal.textSecondary),
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final att in visibleAttachments)
+                                ActionChip(
+                                  avatar: _downloadingAttId == att.id
+                                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                      : Icon(Icons.download_rounded, size: 16, color: pal.accent),
+                                  label: Text('${att.filename} (${_formatSize(att.size)})'),
+                                  onPressed: _downloadingAttId == att.id ? null : () => _downloadAndOpen(att),
+                                ),
+                            ],
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            child: Divider(color: pal.borderSubtle),
                           ),
                         ],
-                        if (_translation!.translatedText.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          SelectableText(
-                            _translation!.translatedText,
-                            style: const TextStyle(fontSize: 14.5, height: 1.6),
+                        if (_translation != null) ...[
+                          Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(bottom: 18),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: pal.accentSoft,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: pal.accent.withValues(alpha: 0.28)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.translate_rounded, size: 17, color: pal.accent),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        '译文（${_langName(_translation!.targetLang)} · ${_translation!.provider}${_translation!.cached ? " · 已缓存" : ""}）',
+                                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: pal.accent),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => setState(() => _onlyTranslation = !_onlyTranslation),
+                                      child: Text(_onlyTranslation ? '显示原文' : '仅看译文', style: const TextStyle(fontSize: 12)),
+                                    ),
+                                    IconButton(
+                                      tooltip: '重新翻译',
+                                      icon: const Icon(Icons.refresh_rounded, size: 17),
+                                      visualDensity: VisualDensity.compact,
+                                      onPressed: _translating ? null : () => _translate(msg, _translation!.targetLang, force: true),
+                                    ),
+                                    IconButton(
+                                      tooltip: '关闭译文',
+                                      icon: const Icon(Icons.close_rounded, size: 17),
+                                      visualDensity: VisualDensity.compact,
+                                      onPressed: () => setState(() {
+                                        _translation = null;
+                                        _onlyTranslation = false;
+                                      }),
+                                    ),
+                                  ],
+                                ),
+                                if (_translation!.translatedSubject.isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  SelectableText(
+                                    '主题：${_translation!.translatedSubject}',
+                                    style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: pal.textPrimary),
+                                  ),
+                                ],
+                                if (_translation!.translatedText.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  SelectableText(
+                                    _translation!.translatedText,
+                                    style: TextStyle(fontSize: 14.5, height: 1.68, color: pal.textPrimary),
+                                  ),
+                                ],
+                              ],
+                            ),
                           ),
+                        ],
+                        if (!_onlyTranslation) ...[
+                          if (!_preferPlain && msg.bodyHtml.isNotEmpty)
+                            SelectionArea(
+                              child: HtmlWidget(
+                                msg.bodyHtml,
+                                textStyle: TextStyle(fontSize: 14.5, height: 1.68, color: pal.textPrimary),
+                                onTapUrl: (url) async {
+                                  final uri = Uri.tryParse(url);
+                                  if (uri != null) {
+                                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                  }
+                                  return true;
+                                },
+                              ),
+                            )
+                          else
+                            SelectableText(
+                              msg.bodyText.isNotEmpty ? msg.bodyText : '（邮件正文为空）',
+                              style: TextStyle(fontSize: 14.5, height: 1.68, color: pal.textPrimary),
+                            ),
                         ],
                       ],
                     ),
                   ),
-                ],
-                if (!_onlyTranslation) ...[
-                  if (!_preferPlain && msg.bodyHtml.isNotEmpty)
-                    SelectionArea(
-                      child: HtmlWidget(
-                        msg.bodyHtml,
-                        onTapUrl: (url) async {
-                          final uri = Uri.tryParse(url);
-                          if (uri != null) {
-                            await launchUrl(uri, mode: LaunchMode.externalApplication);
-                          }
-                          return true;
-                        },
-                      ),
-                    )
-                  else
-                    SelectableText(
-                      msg.bodyText.isNotEmpty ? msg.bodyText : '（邮件正文为空）',
-                      style: const TextStyle(fontSize: 14.5, height: 1.6),
-                    ),
-                ],
-              ],
+                ),
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ToolbarButton extends StatelessWidget {
+  final String tooltip;
+  final IconData icon;
+  final String? label;
+  final VoidCallback onTap;
+
+  const _ToolbarButton({
+    required this.tooltip,
+    required this.icon,
+    this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = context.palette;
+    if (label == null) {
+      return IconButton(
+        tooltip: tooltip,
+        onPressed: onTap,
+        icon: Icon(icon, size: 19, color: pal.textSecondary),
+        visualDensity: VisualDensity.compact,
+      );
+    }
+    return TextButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 17, color: pal.textSecondary),
+      label: Text(label!, style: TextStyle(fontSize: 13, color: pal.textPrimary)),
     );
   }
 }

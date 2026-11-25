@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../core/theme.dart';
 import '../models/models.dart';
 import '../providers/mail_provider.dart';
+import 'brand_widgets.dart';
 
 class Sidebar extends ConsumerStatefulWidget {
   final bool inDrawer;
@@ -42,33 +43,40 @@ class _SidebarState extends ConsumerState<Sidebar> {
     final auth = ref.watch(authProvider);
     final mail = ref.watch(mailProvider);
     final notifier = ref.read(mailProvider.notifier);
-    final scheme = Theme.of(context).colorScheme;
+    final p = context.palette;
 
     return Container(
-      width: 268,
-      color: Theme.of(context).cardTheme.color ?? scheme.surface,
+      width: 266,
+      color: p.sidebarBg,
       child: SafeArea(
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 10, 10),
+              padding: const EdgeInsets.fromLTRB(16, 14, 10, 12),
               child: Row(
                 children: [
-                  Icon(Icons.mark_email_read_rounded, color: scheme.primary, size: 24),
-                  const SizedBox(width: 8),
-                  const Expanded(
+                  const MailControlLogo(size: 30),
+                  const SizedBox(width: 10),
+                  Expanded(
                     child: Text(
                       'MailControl',
-                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                        fontSize: 16.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.2,
+                        color: p.textPrimary,
+                      ),
                     ),
                   ),
                   IconButton(
-                    tooltip: '切换主题',
+                    tooltip: '切换浅色/深色主题',
                     onPressed: () => ref.read(authProvider.notifier).toggleTheme(),
                     icon: Icon(
                       auth.themeMode == ThemeMode.dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-                      size: 20,
+                      size: 19,
+                      color: p.textSecondary,
                     ),
+                    visualDensity: VisualDensity.compact,
                   ),
                 ],
               ),
@@ -82,21 +90,22 @@ class _SidebarState extends ConsumerState<Sidebar> {
                     _closeIfDrawer();
                     widget.onCompose();
                   },
-                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  icon: const Icon(Icons.edit_square, size: 17),
                   label: const Text('写邮件'),
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
                 children: [
                   _NavItem(
-                    icon: Icons.inbox_rounded,
+                    icon: Icons.all_inbox_rounded,
                     label: '全部收件箱',
                     badge: mail.stats.inboxUnread,
                     selected: mail.activeView == 'inbox' && mail.activeAccountId == null && mail.activeFolderId == null,
@@ -106,7 +115,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
                     },
                   ),
                   _NavItem(
-                    icon: Icons.star_outline_rounded,
+                    icon: Icons.star_rounded,
                     label: '星标邮件',
                     badge: mail.stats.starredCount,
                     selected: mail.activeView == 'starred' && mail.activeAccountId == null,
@@ -116,7 +125,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
                     },
                   ),
                   _NavItem(
-                    icon: Icons.send_outlined,
+                    icon: Icons.send_rounded,
                     label: '已发送',
                     selected: mail.activeView == 'sent' && mail.activeAccountId == null,
                     onTap: () {
@@ -125,7 +134,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
                     },
                   ),
                   _NavItem(
-                    icon: Icons.drafts_outlined,
+                    icon: Icons.drafts_rounded,
                     label: '草稿箱',
                     badge: mail.stats.draftsCount,
                     selected: mail.activeView == 'drafts' && mail.activeAccountId == null,
@@ -135,8 +144,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
                     },
                   ),
                   _NavItem(
-                    icon: Icons.archive_outlined,
-                    label: '归档',
+                    icon: Icons.archive_rounded,
+                    label: '归档邮件',
                     selected: mail.activeView == 'archive' && mail.activeAccountId == null,
                     onTap: () {
                       _closeIfDrawer();
@@ -152,20 +161,14 @@ class _SidebarState extends ConsumerState<Sidebar> {
                       notifier.selectView('trash');
                     },
                   ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                    child: Divider(),
-                  ),
+                  const SizedBox(height: 14),
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 2, 4, 4),
+                    padding: const EdgeInsets.fromLTRB(8, 2, 2, 6),
                     child: Row(
                       children: [
                         Text(
                           '已绑定邮箱 (${mail.accounts.length})',
-                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                                fontWeight: FontWeight.w600,
-                              ),
+                          style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: p.textMuted),
                         ),
                         const Spacer(),
                         IconButton(
@@ -174,7 +177,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
                             _closeIfDrawer();
                             widget.onOpenAccountModal();
                           },
-                          icon: const Icon(Icons.add_circle_outline, size: 19),
+                          icon: Icon(Icons.add_rounded, size: 19, color: p.textSecondary),
                           visualDensity: VisualDensity.compact,
                         ),
                       ],
@@ -182,31 +185,25 @@ class _SidebarState extends ConsumerState<Sidebar> {
                   ),
                   if (mail.accounts.isEmpty)
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                       child: OutlinedButton.icon(
                         onPressed: () {
                           _closeIfDrawer();
                           widget.onOpenAccountModal();
                         },
-                        icon: const Icon(Icons.add, size: 16),
+                        icon: const Icon(Icons.add_rounded, size: 17),
                         label: const Text('添加第一个邮箱'),
                       ),
                     ),
                   for (final acct in mail.accounts) _buildAccountGroup(context, acct, mail, notifier),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                    child: Divider(),
-                  ),
+                  const SizedBox(height: 14),
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 2, 4, 4),
+                    padding: const EdgeInsets.fromLTRB(8, 2, 2, 6),
                     child: Row(
                       children: [
                         Text(
                           '标签分类',
-                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                                fontWeight: FontWeight.w600,
-                              ),
+                          style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: p.textMuted),
                         ),
                         const Spacer(),
                         IconButton(
@@ -215,7 +212,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
                             _closeIfDrawer();
                             widget.onOpenTags();
                           },
-                          icon: const Icon(Icons.tune_rounded, size: 18),
+                          icon: Icon(Icons.tune_rounded, size: 17, color: p.textSecondary),
                           visualDensity: VisualDensity.compact,
                         ),
                       ],
@@ -223,7 +220,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
                   ),
                   for (final tag in mail.tags)
                     _NavItem(
-                      icon: Icons.label_outline_rounded,
+                      icon: Icons.label_rounded,
                       iconColor: parseHexColor(tag.color),
                       label: tag.name,
                       selected: mail.activeView == 'tag' && mail.activeTagId == tag.id,
@@ -235,9 +232,9 @@ class _SidebarState extends ConsumerState<Sidebar> {
                 ],
               ),
             ),
-            const Divider(),
+            Divider(color: p.borderSubtle),
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+              padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
               child: Column(
                 children: [
                   Row(
@@ -248,8 +245,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
                             _closeIfDrawer();
                             widget.onOpenRules();
                           },
-                          icon: const Icon(Icons.auto_fix_high_outlined, size: 17),
-                          label: const Text('自动规则'),
+                          icon: Icon(Icons.auto_fix_high_rounded, size: 16, color: p.textSecondary),
+                          label: Text('自动规则', style: TextStyle(fontSize: 12.5, color: p.textPrimary)),
                         ),
                       ),
                       Expanded(
@@ -258,46 +255,51 @@ class _SidebarState extends ConsumerState<Sidebar> {
                             _closeIfDrawer();
                             widget.onOpenSignatures();
                           },
-                          icon: const Icon(Icons.draw_outlined, size: 17),
-                          label: const Text('签名模板'),
+                          icon: Icon(Icons.draw_rounded, size: 16, color: p.textSecondary),
+                          label: Text('签名模板', style: TextStyle(fontSize: 12.5, color: p.textPrimary)),
                         ),
                       ),
                     ],
                   ),
-                  ListTile(
-                    dense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
-                    leading: CircleAvatar(
-                      radius: 14,
-                      backgroundColor: scheme.primaryContainer,
-                      child: Text(
-                        (auth.user?.username ?? 'U').substring(0, 1).toUpperCase(),
-                        style: TextStyle(fontSize: 12, color: scheme.primary, fontWeight: FontWeight.w700),
-                      ),
+                  const SizedBox(height: 2),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: p.surfaceElevated.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: p.borderSubtle),
                     ),
-                    title: Text(
-                      auth.user?.username ?? '',
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Text(
-                      auth.baseUrl,
-                      style: const TextStyle(fontSize: 11),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: Wrap(
-                      spacing: 0,
+                    child: Row(
                       children: [
+                        SenderAvatar(name: auth.user?.username ?? 'U', size: 28),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                auth.user?.username ?? '',
+                                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: p.textPrimary),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                auth.baseUrl,
+                                style: TextStyle(fontSize: 10.5, color: p.textMuted),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
                         IconButton(
                           tooltip: '多端同步与连接地址',
                           onPressed: () => _showSyncDialog(context),
-                          icon: const Icon(Icons.devices_rounded, size: 18),
+                          icon: Icon(Icons.devices_rounded, size: 17, color: p.textSecondary),
                           visualDensity: VisualDensity.compact,
                         ),
                         IconButton(
                           tooltip: '退出登录',
                           onPressed: () => ref.read(authProvider.notifier).logout(),
-                          icon: const Icon(Icons.logout_rounded, size: 18),
+                          icon: Icon(Icons.logout_rounded, size: 17, color: p.textSecondary),
                           visualDensity: VisualDensity.compact,
                         ),
                       ],
@@ -344,7 +346,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
               Text('当前连接地址：${auth.baseUrl}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
               if (lanUrls.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                const Text('手机端可填写以下局域网地址连接本机：', style: TextStyle(fontSize: 12.5)),
+                const Text('可用服务端地址（点击复制）：', style: TextStyle(fontSize: 12.5)),
                 const SizedBox(height: 6),
                 for (final u in lanUrls)
                   ListTile(
@@ -382,20 +384,20 @@ class _SidebarState extends ConsumerState<Sidebar> {
     final unread = mail.stats.accountUnread[acct.id] ?? acct.unreadCount;
     final isSelected = mail.activeAccountId == acct.id && mail.activeFolderId == null;
     final color = parseHexColor(acct.color);
-    final scheme = Theme.of(context).colorScheme;
+    final p = context.palette;
 
     return Column(
       children: [
-        InkWell(
-          borderRadius: BorderRadius.circular(10),
+        HoverSurface(
           onTap: () {
             _closeIfDrawer();
             notifier.selectView('inbox', accountId: acct.id);
           },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          builder: (context, hovering) => Container(
+            margin: const EdgeInsets.symmetric(vertical: 1.5),
+            padding: const EdgeInsets.fromLTRB(6, 7, 4, 7),
             decoration: BoxDecoration(
-              color: isSelected ? scheme.primaryContainer.withValues(alpha: 0.55) : Colors.transparent,
+              color: isSelected ? p.activeBg : (hovering ? p.hoverBg : Colors.transparent),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
@@ -408,18 +410,17 @@ class _SidebarState extends ConsumerState<Sidebar> {
                       _expandedAccounts.add(acct.id);
                     }
                   }),
-                  child: Icon(
-                    isExpanded ? Icons.keyboard_arrow_down_rounded : Icons.keyboard_arrow_right_rounded,
-                    size: 18,
-                    color: scheme.onSurfaceVariant,
+                  child: Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: Icon(
+                      isExpanded ? Icons.keyboard_arrow_down_rounded : Icons.keyboard_arrow_right_rounded,
+                      size: 17,
+                      color: p.textMuted,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 4),
-                Container(
-                  width: 9,
-                  height: 9,
-                  decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-                ),
+                ProviderBadge(providerId: acct.providerId, fallbackColor: color, size: 22),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
@@ -427,12 +428,12 @@ class _SidebarState extends ConsumerState<Sidebar> {
                     children: [
                       Text(
                         acct.label,
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: p.textPrimary),
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
                         acct.emailAddress,
-                        style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                        style: TextStyle(fontSize: 11, color: p.textMuted),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
@@ -442,31 +443,33 @@ class _SidebarState extends ConsumerState<Sidebar> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: scheme.primary,
+                      color: p.accent,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
                       '$unread',
-                      style: TextStyle(fontSize: 11, color: scheme.onPrimary, fontWeight: FontWeight.w600),
+                      style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600),
                     ),
                   ),
-                IconButton(
-                  tooltip: '立即同步',
-                  icon: acct.lastSyncStatus == 'syncing'
-                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.sync_rounded, size: 16),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => notifier.syncSingleAccount(acct.id),
-                ),
-                IconButton(
-                  tooltip: '邮箱设置',
-                  icon: const Icon(Icons.settings_outlined, size: 16),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () {
-                    _closeIfDrawer();
-                    widget.onOpenAccountModal(acct);
-                  },
-                ),
+                if (hovering || acct.lastSyncStatus == 'syncing')
+                  IconButton(
+                    tooltip: '立即同步',
+                    icon: acct.lastSyncStatus == 'syncing'
+                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                        : Icon(Icons.sync_rounded, size: 15, color: p.textSecondary),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => notifier.syncSingleAccount(acct.id),
+                  ),
+                if (hovering)
+                  IconButton(
+                    tooltip: '邮箱设置',
+                    icon: Icon(Icons.settings_outlined, size: 15, color: p.textSecondary),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () {
+                      _closeIfDrawer();
+                      widget.onOpenAccountModal(acct);
+                    },
+                  ),
               ],
             ),
           ),
@@ -496,13 +499,13 @@ class _SidebarState extends ConsumerState<Sidebar> {
   }
 
   IconData _folderIcon(String role) => switch (role) {
-        'inbox' => Icons.inbox_outlined,
-        'sent' => Icons.send_outlined,
-        'drafts' => Icons.drafts_outlined,
-        'archive' => Icons.archive_outlined,
-        'trash' => Icons.delete_outline,
-        'spam' => Icons.report_gmailerrorred_outlined,
-        _ => Icons.folder_outlined,
+        'inbox' => Icons.inbox_rounded,
+        'sent' => Icons.send_rounded,
+        'drafts' => Icons.drafts_rounded,
+        'archive' => Icons.archive_rounded,
+        'trash' => Icons.delete_outline_rounded,
+        'spam' => Icons.report_gmailerrorred_rounded,
+        _ => Icons.folder_rounded,
       };
 }
 
@@ -527,55 +530,52 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 1),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: onTap,
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 10, vertical: dense ? 6 : 8),
-          decoration: BoxDecoration(
-            color: selected ? scheme.primaryContainer.withValues(alpha: 0.65) : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                size: dense ? 17 : 19,
-                color: iconColor ?? (selected ? scheme.primary : scheme.onSurfaceVariant),
+    final p = context.palette;
+    return HoverSurface(
+      onTap: onTap,
+      builder: (context, hovering) => Container(
+        margin: const EdgeInsets.symmetric(vertical: 1.5),
+        padding: EdgeInsets.symmetric(horizontal: 10, vertical: dense ? 6 : 8),
+        decoration: BoxDecoration(
+          color: selected ? p.activeBg : (hovering ? p.hoverBg : Colors.transparent),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: dense ? 16 : 18,
+              color: iconColor ?? (selected ? p.accent : p.textSecondary),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: dense ? 12.8 : 13.5,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  color: selected ? p.accent : p.textPrimary,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(width: 10),
-              Expanded(
+            ),
+            if (badge > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: selected ? p.accent : p.hoverBg,
+                  borderRadius: BorderRadius.circular(10),
+                ),
                 child: Text(
-                  label,
+                  '$badge',
                   style: TextStyle(
-                    fontSize: dense ? 13 : 13.5,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                    color: selected ? scheme.onPrimaryContainer : scheme.onSurface,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: selected ? Colors.white : p.textSecondary,
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (badge > 0)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: selected ? scheme.primary : scheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    '$badge',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-            ],
-          ),
+          ],
         ),
       ),
     );
