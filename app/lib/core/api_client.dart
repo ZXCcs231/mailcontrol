@@ -306,6 +306,19 @@ class ApiClient {
     return (resp.data['matched'] as num?)?.toInt() ?? 0;
   }
 
+  Future<List<Map<String, dynamic>>> getRulePresets() async {
+    final resp = await _dio.get('/api/rules/presets');
+    final list = (resp.data['items'] as List?) ?? const [];
+    return list.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  Future<int> applyRulePresets({List<String>? presetIds}) async {
+    final resp = await _dio.post('/api/rules/presets/apply', data: {
+      'preset_ids': ?presetIds,
+    });
+    return (resp.data['added'] as num?)?.toInt() ?? 0;
+  }
+
   Future<List<MailSignature>> getSignatures() async {
     final resp = await _dio.get('/api/signatures');
     final list = (resp.data['items'] as List?) ?? const [];

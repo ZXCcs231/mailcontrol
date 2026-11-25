@@ -11,6 +11,7 @@ import (
 
 	"mailcontrol-backend/internal/crypto"
 	"mailcontrol-backend/internal/models"
+	"mailcontrol-backend/internal/rules"
 )
 
 type registerReq struct {
@@ -68,6 +69,7 @@ func (s *Server) Register(c *gin.Context) {
 		return
 	}
 	uid, _ := res.LastInsertId()
+	_, _ = rules.InstallPresetsForUser(s.DB, uid, nil)
 
 	var user models.User
 	_ = s.DB.QueryRow(`SELECT id, username, email, created_at FROM users WHERE id = ?`, uid).

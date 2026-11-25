@@ -3,9 +3,11 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"mailcontrol-backend/internal/config"
@@ -162,7 +164,7 @@ func TestEndToEndFlow(t *testing.T) {
 		},
 		"actions": []map[string]interface{}{
 			{"type": "star"},
-			{"type": "add_tag", "value": "1"},
+			{"type": "add_tag", "value": strconv.FormatInt(tagResp.ID, 10)},
 		},
 	})
 	if w.Code != http.StatusCreated {
@@ -173,7 +175,7 @@ func TestEndToEndFlow(t *testing.T) {
 	}
 	_ = json.Unmarshal(w.Body.Bytes(), &ruleResp)
 
-	w = doReq(t, h, "POST", "/api/rules/1/run", authResp.Token, nil)
+	w = doReq(t, h, "POST", fmt.Sprintf("/api/rules/%d/run", ruleResp.ID), authResp.Token, nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("run rule status=%d body=%s", w.Code, w.Body.String())
 	}
@@ -183,6 +185,22 @@ func TestEndToEndFlow(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &runResp)
 	if runResp.Matched != 1 {
 		t.Fatalf("expected rule to match 1 message, got %d", runResp.Matched)
+	}
+
+	w = doReq(t, h, "GET", "/api/rules/presets", authResp.Token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("rule presets status=%d", w.Code)
+	}
+	w = doReq(t, h, "POST", "/api/rules/presets/apply", authResp.Token, map[string]interface{}{})
+	if w.Code != http.StatusOK {
+		t.Fatalf("apply rule presets status=%d", w.Code)
+	}
+	var applyResp struct {
+		Added int `json:"added"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &applyResp)
+	if applyResp.Added != 0 {
+		t.Fatalf("expected 0 added on second apply (idempotent), got %d", applyResp.Added)
 	}
 
 	w = doReq(t, h, "GET", "/api/stats", authResp.Token, nil)

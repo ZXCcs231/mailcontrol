@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../core/theme.dart';
 import '../models/models.dart';
 import '../providers/mail_provider.dart';
 
@@ -18,10 +19,108 @@ class RulesScreen extends ConsumerWidget {
     }
   }
 
+  Future<void> _openPresetsDialog(BuildContext context, WidgetRef ref) async {
+    final api = ref.read(apiClientProvider);
+    List<Map<String, dynamic>> presets = [];
+    try {
+      presets = await api.getRulePresets();
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(api.extractError(e))));
+      }
+      return;
+    }
+    if (!context.mounted) return;
+
+    final existingNames = ref.read(mailProvider).rules.map((r) => r.name).toSet();
+    final selectedIds = <String>{
+      for (final p in presets)
+        if (!existingNames.contains(p['name']?.toString() ?? '')) p['id'].toString(),
+    };
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('导入常用自动分类预设'),
+          content: SizedBox(
+            width: 500,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final p in presets)
+                    Builder(
+                      builder: (_) {
+                        final id = p['id'].toString();
+                        final name = p['name'].toString();
+                        final desc = p['description']?.toString() ?? '';
+                        final exists = existingNames.contains(name);
+                        return CheckboxListTile(
+                          value: exists ? true : selectedIds.contains(id),
+                          onChanged: exists
+                              ? null
+                              : (v) => setState(() {
+                                    if (v == true) {
+                                      selectedIds.add(id);
+                                    } else {
+                                      selectedIds.remove(id);
+                                    }
+                                  }),
+                          title: Row(
+                            children: [
+                              Expanded(child: Text(name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14))),
+                              if (exists)
+                                const Text('已导入', style: TextStyle(fontSize: 11.5, color: Colors.grey)),
+                            ],
+                          ),
+                          subtitle: Text(desc, style: const TextStyle(fontSize: 12)),
+                        );
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+            FilledButton(
+              onPressed: selectedIds.isEmpty ? null : () => Navigator.pop(ctx, true),
+              child: Text('导入选中 (${selectedIds.length})'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+
+    final added = await api.applyRulePresets(presetIds: selectedIds.toList());
+    await ref.read(mailProvider.notifier).refreshMetadata();
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(added > 0 ? '成功导入 $added 条预设规则及对应标签' : '所选预设规则均已存在')),
+      );
+    }
+  }
+
+  String _summarizeRule(MailRule r) {
+    final kws = r.conditions.map((c) => c.value).where((v) => v.isNotEmpty).take(3).join(' / ');
+    final actNames = r.actions.map((a) => switch (a.type) {
+          'mark_read' => '标为已读',
+          'star' => '加星标',
+          'add_tag' => '打标签',
+          'move_folder' => a.value == 'trash' ? '移至回收站' : '归档',
+          'delete' => '删除',
+          _ => a.type,
+        }).join(' + ');
+    return '关键词：$kws${r.conditions.length > 3 ? " 等" : ""} → $actNames';
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final mail = ref.watch(mailProvider);
     final api = ref.read(apiClientProvider);
+    final pal = context.palette;
 
     final body = Column(
       children: [
@@ -29,8 +128,15 @@ class RulesScreen extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
           child: Row(
             children: [
-              const Text('邮件自动分类规则', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-              const Spacer(),
+              const Expanded(
+                child: Text('邮件自动分类规则', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => _openPresetsDialog(context, ref),
+                icon: const Icon(Icons.auto_awesome_outlined, size: 17),
+                label: const Text('导入常用预设'),
+              ),
+              const SizedBox(width: 8),
               FilledButton.icon(
                 onPressed: () => _openEditor(context, ref),
                 icon: const Icon(Icons.add, size: 18),
@@ -44,7 +150,20 @@ class RulesScreen extends ConsumerWidget {
         const Divider(),
         Expanded(
           child: mail.rules.isEmpty
-              ? const Center(child: Text('暂无自动规则，点击右上角创建'))
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('暂无自动规则，可点击一键导入内置常用预设'),
+                      const SizedBox(height: 12),
+                      FilledButton.tonalIcon(
+                        onPressed: () => _openPresetsDialog(context, ref),
+                        icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+                        label: const Text('导入常用预设规则'),
+                      ),
+                    ],
+                  ),
+                )
               : ListView.separated(
                   padding: const EdgeInsets.all(14),
                   itemCount: mail.rules.length,
@@ -53,9 +172,12 @@ class RulesScreen extends ConsumerWidget {
                     final r = mail.rules[idx];
                     return Card(
                       child: ListTile(
-                        title: Text(r.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        title: Text(r.name, style: TextStyle(fontWeight: FontWeight.w600, color: pal.textPrimary)),
                         subtitle: Text(
-                          '${r.conditions.length} 个条件 (${r.matchMode == "any" ? "满足任一" : "全部满足"}) → ${r.actions.length} 个动作',
+                          _summarizeRule(r),
+                          style: TextStyle(fontSize: 12.5, color: pal.textSecondary),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         trailing: Wrap(
                           spacing: 4,

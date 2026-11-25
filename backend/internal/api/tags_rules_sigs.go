@@ -111,6 +111,26 @@ type ruleReq struct {
 	Actions    []models.RuleAction    `json:"actions"`
 }
 
+func (s *Server) ListRulePresets(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"items": rules.Presets()})
+}
+
+type applyRulePresetsReq struct {
+	PresetIDs []string `json:"preset_ids"`
+}
+
+func (s *Server) ApplyRulePresets(c *gin.Context) {
+	uid := currentUserID(c)
+	var req applyRulePresetsReq
+	_ = c.ShouldBindJSON(&req)
+	added, err := rules.InstallPresetsForUser(s.DB, uid, req.PresetIDs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"added": added})
+}
+
 func (s *Server) ListRules(c *gin.Context) {
 	uid := currentUserID(c)
 	rows, err := s.DB.Query(`

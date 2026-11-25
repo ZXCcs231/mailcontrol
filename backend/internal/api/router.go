@@ -64,6 +64,8 @@ func NewRouter(conn *sql.DB, cfg *config.Config, hub *syncer.Hub, scheduler *syn
 			auth.DELETE("/tags/:id", srv.DeleteTag)
 
 			auth.GET("/rules", srv.ListRules)
+			auth.GET("/rules/presets", srv.ListRulePresets)
+			auth.POST("/rules/presets/apply", srv.ApplyRulePresets)
 			auth.POST("/rules", srv.CreateRule)
 			auth.PUT("/rules/:id", srv.UpdateRule)
 			auth.DELETE("/rules/:id", srv.DeleteRule)
