@@ -19,45 +19,50 @@
    - 写信、回复、回复全部、转发、多附件上传与下载打开、全字段搜索、未读/附件筛选、批量操作。
 5. **自动化与实时推送**：
    - 后台按账号独立间隔增量同步，通过 SSE 实时推送新邮件提醒。
-   - 可视化**自动分类规则引擎**（支持新邮件自动触发及对历史邮件立即运行）、**彩色标签体系**与**多签名模板**。
+   - 可视化**自动分类规则引擎**（支持新邮件自动触发及对历史邮件一键运行）、**彩色标签体系**与**多签名模板**。
 
 ---
 
-## 本机开发环境路径
+## 环境要求
 
-- **Go**：`D:\environment\go`（`GOPATH=D:\environment\go-path`，`GOPROXY=https://goproxy.cn,direct`）
-- **Flutter SDK**：`D:\environment\flutter`（`PUB_CACHE=D:\environment\pub-cache`）
-- **Android SDK**：`D:\environment\Android\Sdk`
+请确保已将以下工具添加到系统 `PATH` 环境变量中：
+
+- **Go**：1.24+（纯 Go 编译，无需 CGO/GCC；国内网络建议设置 `GOPROXY=https://goproxy.cn,direct`）
+- **Flutter SDK**：3.27+（需启用 Windows 桌面支持及 Android 工具链）
+- **Android 编译**：JDK 17+ 与 Android SDK（用于构建 `.apk`）
+- **Windows 编译**：Visual Studio / Build Tools C++ 桌面开发组件（用于构建 `.exe`）
 
 ---
 
 ## 快速启动与使用指南
 
+以下命令均在仓库根目录（`mailcontrol/`）下以相对路径执行：
+
 ### 1. 运行 Go 后端单元测试与服务
 
 ```powershell
-cd e:\code\mailcontrol\backend
+cd backend
 go test -v ./...
 go build -o mailcontrol-server.exe ./cmd/server
 .\mailcontrol-server.exe
 ```
 
-后端默认监听 `0.0.0.0:8080`，数据（SQLite 数据库、附件及本地自动生成的密钥 `secrets.json`）保存在 `backend\data\`。
+后端默认监听 `0.0.0.0:8080`，数据（SQLite 数据库、附件及本地自动生成的密钥 `secrets.json`）保存在 `./backend/data/`。
 
 ### 2. 运行或打包客户端
 
-- **一键构建全平台产物**：
+- **一键构建全平台产物**（在仓库根目录执行）：
   ```powershell
-  powershell -ExecutionPolicy Bypass -File e:\code\mailcontrol\scripts\build-all.ps1
+  powershell -ExecutionPolicy Bypass -File .\scripts\build-all.ps1
   ```
 - **直接调试运行 Windows 端**：
   ```powershell
-  cd e:\code\mailcontrol\app
+  cd app
   flutter run -d windows
   ```
 - **编译 Android APK**：
   ```powershell
-  cd e:\code\mailcontrol\app
+  cd app
   flutter build apk --release
   ```
   > 提示：若在 Windows 上首次编译含插件的桌面端，请确保已在 **Windows 设置 → 系统 → 开发者选项** 中开启“开发人员模式”（用于创建 Flutter 插件所需的符号链接）。

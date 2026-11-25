@@ -10,13 +10,24 @@ class LocalServerManager {
 
   String? findServerExecutable() {
     if (!Platform.isWindows) return null;
+
     final exeDir = File(Platform.resolvedExecutable).parent.path;
-    final candidates = [
+    final candidates = <String>[
       p.join(exeDir, 'mailcontrol-server.exe'),
+      p.join(Directory.current.path, 'mailcontrol-server.exe'),
       p.join(Directory.current.path, 'backend', 'mailcontrol-server.exe'),
       p.join(Directory.current.parent.path, 'backend', 'mailcontrol-server.exe'),
-      r'E:\code\mailcontrol\backend\mailcontrol-server.exe',
     ];
+
+    // 从可执行文件目录向上最多查找 6 层，兼容从 app/build/... 调试运行
+    var cursor = Directory(exeDir);
+    for (var i = 0; i < 6; i++) {
+      candidates.add(p.join(cursor.path, 'backend', 'mailcontrol-server.exe'));
+      final parent = cursor.parent;
+      if (parent.path == cursor.path) break;
+      cursor = parent;
+    }
+
     for (final c in candidates) {
       if (File(c).existsSync()) return c;
     }
