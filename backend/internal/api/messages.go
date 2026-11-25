@@ -222,13 +222,13 @@ func (s *Server) PatchMessage(c *gin.Context) {
 
 	var accountID, folderID int64
 	var remoteUID uint32
-	var remoteFolder string
+	var remoteFolder, msgIDHeader string
 	err = s.DB.QueryRow(`
-		SELECT m.account_id, m.folder_id, m.remote_uid, f.remote_name
+		SELECT m.account_id, m.folder_id, m.remote_uid, f.remote_name, m.message_id_header
 		FROM messages m
 		JOIN folders f ON f.id = m.folder_id
 		WHERE m.id = ? AND m.user_id = ?`, id, uid,
-	).Scan(&accountID, &folderID, &remoteUID, &remoteFolder)
+	).Scan(&accountID, &folderID, &remoteUID, &remoteFolder, &msgIDHeader)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "邮件不存在"})
 		return
@@ -240,24 +240,51 @@ func (s *Server) PatchMessage(c *gin.Context) {
 		return
 	}
 
+	affectedFolders := map[int64]struct{}{folderID: {}}
+	collectSiblings := func() {
+		if msgIDHeader == "" {
+			return
+		}
+		fRows, err := s.DB.Query(`SELECT DISTINCT folder_id FROM messages WHERE account_id = ? AND message_id_header = ?`, accountID, msgIDHeader)
+		if err != nil {
+			return
+		}
+		defer func() { _ = fRows.Close() }()
+		for fRows.Next() {
+			var fid int64
+			if fRows.Scan(&fid) == nil {
+				affectedFolders[fid] = struct{}{}
+			}
+		}
+	}
+
 	if req.IsRead != nil {
-		_, _ = s.DB.Exec(`UPDATE messages SET is_read = ? WHERE id = ?`, boolInt(*req.IsRead), id)
-		_ = mailclient.RefreshFolderCounts(s.DB, folderID)
+		collectSiblings()
+		if msgIDHeader != "" {
+			_, _ = s.DB.Exec(`UPDATE messages SET is_read = ? WHERE account_id = ? AND message_id_header = ?`, boolInt(*req.IsRead), accountID, msgIDHeader)
+		} else {
+			_, _ = s.DB.Exec(`UPDATE messages SET is_read = ? WHERE id = ?`, boolInt(*req.IsRead), id)
+		}
 	}
 	if req.IsStarred != nil {
-		_, _ = s.DB.Exec(`UPDATE messages SET is_starred = ? WHERE id = ?`, boolInt(*req.IsStarred), id)
+		if msgIDHeader != "" {
+			_, _ = s.DB.Exec(`UPDATE messages SET is_starred = ? WHERE account_id = ? AND message_id_header = ?`, boolInt(*req.IsStarred), accountID, msgIDHeader)
+		} else {
+			_, _ = s.DB.Exec(`UPDATE messages SET is_starred = ? WHERE id = ?`, boolInt(*req.IsStarred), id)
+		}
 	}
 	if req.MoveRole != nil && *req.MoveRole != "" {
 		targetID, err := mailclient.GetOrCreateFolderByRole(s.DB, accountID, strings.ToLower(*req.MoveRole))
 		if err == nil && targetID > 0 && targetID != folderID {
 			_, _ = s.DB.Exec(`UPDATE messages SET folder_id = ? WHERE id = ?`, targetID, id)
-			_ = mailclient.RefreshFolderCounts(s.DB, folderID)
-			_ = mailclient.RefreshFolderCounts(s.DB, targetID)
+			affectedFolders[targetID] = struct{}{}
 		}
 	} else if req.FolderID != nil && *req.FolderID > 0 {
 		_, _ = s.DB.Exec(`UPDATE messages SET folder_id = ? WHERE id = ?`, *req.FolderID, id)
-		_ = mailclient.RefreshFolderCounts(s.DB, folderID)
-		_ = mailclient.RefreshFolderCounts(s.DB, *req.FolderID)
+		affectedFolders[*req.FolderID] = struct{}{}
+	}
+	for fid := range affectedFolders {
+		_ = mailclient.RefreshFolderCounts(s.DB, fid)
 	}
 	if req.AddTagID != nil && *req.AddTagID > 0 {
 		_, _ = s.DB.Exec(`INSERT OR IGNORE INTO message_tags (message_id, tag_id) VALUES (?, ?)`, id, *req.AddTagID)
@@ -338,25 +365,60 @@ func (s *Server) BatchMessages(c *gin.Context) {
 	affectedFolders := make(map[int64]struct{})
 	for _, id := range req.IDs {
 		var accountID, folderID int64
-		var folderRole string
+		var folderRole, msgIDHeader string
 		err := s.DB.QueryRow(`
-			SELECT m.account_id, m.folder_id, f.role
+			SELECT m.account_id, m.folder_id, f.role, m.message_id_header
 			FROM messages m JOIN folders f ON f.id = m.folder_id
-			WHERE m.id = ? AND m.user_id = ?`, id, uid).Scan(&accountID, &folderID, &folderRole)
+			WHERE m.id = ? AND m.user_id = ?`, id, uid).Scan(&accountID, &folderID, &folderRole, &msgIDHeader)
 		if err != nil {
 			continue
 		}
 		affectedFolders[folderID] = struct{}{}
 
+		collectBatchSiblings := func() {
+			if msgIDHeader == "" {
+				return
+			}
+			fRows, err := s.DB.Query(`SELECT DISTINCT folder_id FROM messages WHERE account_id = ? AND message_id_header = ?`, accountID, msgIDHeader)
+			if err != nil {
+				return
+			}
+			defer func() { _ = fRows.Close() }()
+			for fRows.Next() {
+				var fid int64
+				if fRows.Scan(&fid) == nil {
+					affectedFolders[fid] = struct{}{}
+				}
+			}
+		}
+
 		switch req.Action {
 		case "mark_read":
-			_, _ = s.DB.Exec(`UPDATE messages SET is_read = 1 WHERE id = ?`, id)
+			collectBatchSiblings()
+			if msgIDHeader != "" {
+				_, _ = s.DB.Exec(`UPDATE messages SET is_read = 1 WHERE account_id = ? AND message_id_header = ?`, accountID, msgIDHeader)
+			} else {
+				_, _ = s.DB.Exec(`UPDATE messages SET is_read = 1 WHERE id = ?`, id)
+			}
 		case "mark_unread":
-			_, _ = s.DB.Exec(`UPDATE messages SET is_read = 0 WHERE id = ?`, id)
+			collectBatchSiblings()
+			if msgIDHeader != "" {
+				_, _ = s.DB.Exec(`UPDATE messages SET is_read = 0 WHERE account_id = ? AND message_id_header = ?`, accountID, msgIDHeader)
+			} else {
+				_, _ = s.DB.Exec(`UPDATE messages SET is_read = 0 WHERE id = ?`, id)
+			}
 		case "star":
-			_, _ = s.DB.Exec(`UPDATE messages SET is_starred = 1 WHERE id = ?`, id)
+			if msgIDHeader != "" {
+				_, _ = s.DB.Exec(`UPDATE messages SET is_starred = 1 WHERE account_id = ? AND message_id_header = ?`, accountID, msgIDHeader)
+			} else {
+				_, _ = s.DB.Exec(`UPDATE messages SET is_starred = 1 WHERE id = ?`, id)
+			}
 		case "unstar":
-			_, _ = s.DB.Exec(`UPDATE messages SET is_starred = 0 WHERE id = ?`, id)
+			if msgIDHeader != "" {
+				_, _ = s.DB.Exec(`UPDATE messages SET is_starred = 0 WHERE account_id = ? AND message_id_header = ?`, accountID, msgIDHeader)
+			} else {
+				_, _ = s.DB.Exec(`UPDATE messages SET is_starred = 0 WHERE id = ?`, id)
+			}
 		case "archive":
 			if targetID, err := mailclient.GetOrCreateFolderByRole(s.DB, accountID, "archive"); err == nil {
 				_, _ = s.DB.Exec(`UPDATE messages SET folder_id = ? WHERE id = ?`, targetID, id)

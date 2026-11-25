@@ -45,7 +45,7 @@ func (s *Server) ListAccounts(c *gin.Context) {
 		       a.smtp_host, a.smtp_port, a.smtp_tls,
 		       a.username, a.color, a.is_default, a.sync_enabled, a.sync_interval_sec,
 		       a.last_sync_at, a.last_sync_status, a.last_sync_error, a.created_at,
-		       COALESCE((SELECT SUM(f.unread_count) FROM folders f WHERE f.account_id = a.id AND f.role = 'inbox'), 0)
+		       COALESCE((SELECT COUNT(*) FROM messages m JOIN folders f ON f.id = m.folder_id WHERE m.account_id = a.id AND f.role = 'inbox' AND m.is_read = 0), 0)
 		FROM mail_accounts a
 		WHERE a.user_id = ?
 		ORDER BY a.is_default DESC, a.id ASC`, uid)

@@ -241,7 +241,7 @@ class _MessageListState extends ConsumerState<MessageList> {
                         ),
                       ),
           ),
-          if (mail.totalMessages > 30)
+          if (mail.totalMessages > 50)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(border: Border(top: BorderSide(color: p.borderSubtle))),
@@ -252,9 +252,12 @@ class _MessageListState extends ConsumerState<MessageList> {
                     onPressed: mail.page > 1 ? () => notifier.setFilters(page: mail.page - 1) : null,
                     child: const Text('上一页'),
                   ),
-                  Text('第 ${mail.page} 页', style: TextStyle(fontSize: 12.5, color: p.textSecondary)),
+                  Text(
+                    '第 ${mail.page} / ${(mail.totalMessages + 49) ~/ 50} 页',
+                    style: TextStyle(fontSize: 12.5, color: p.textSecondary),
+                  ),
                   TextButton(
-                    onPressed: mail.page * 30 < mail.totalMessages
+                    onPressed: mail.page * 50 < mail.totalMessages
                         ? () => notifier.setFilters(page: mail.page + 1)
                         : null,
                     child: const Text('下一页'),

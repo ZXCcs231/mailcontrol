@@ -211,6 +211,9 @@ func SyncAccount(conn *sql.DB, acct models.MailAccount, password, dataDir string
 
 	var newMessages []models.Message
 	for _, rf := range remoteFolders {
+		if isVirtualAggregateFolder(rf.Name, rf.Attributes) {
+			continue
+		}
 		role, displayName := classifyFolder(rf.Name, rf.Attributes)
 		folder, err := upsertFolder(conn, acct.ID, displayName, rf.Name, role)
 		if err != nil {
@@ -687,6 +690,20 @@ func hasAttr(attrs []string, target string) bool {
 		if strings.EqualFold(a, target) {
 			return true
 		}
+	}
+	return false
+}
+
+func isVirtualAggregateFolder(remoteName string, attrs []string) bool {
+	if hasAttr(attrs, `\All`) || hasAttr(attrs, `\Flagged`) || hasAttr(attrs, `\Important`) {
+		return true
+	}
+	lower := strings.ToLower(strings.TrimSpace(remoteName))
+	switch lower {
+	case "[gmail]/all mail", "[gmail]/所有邮件",
+		"[gmail]/important", "[gmail]/重要",
+		"[gmail]/starred", "[gmail]/已加星标":
+		return true
 	}
 	return false
 }

@@ -347,3 +347,118 @@ func TestDirtySQLiteTimestampMessagesNotDropped(t *testing.T) {
 		t.Fatalf("get message status=%d body=%s", w.Code, w.Body.String())
 	}
 }
+
+func TestSiblingCopiesSyncReadAndCleanupVirtualFolders(t *testing.T) {
+	conn, h := setupTestRouterWithDB(t)
+
+	w := doReq(t, h, "POST", "/api/auth/register", "", map[string]string{
+		"username": "syncuser",
+		"email":    "syncuser@qq.com",
+		"password": "password123",
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("register status=%d body=%s", w.Code, w.Body.String())
+	}
+	var authResp struct {
+		Token string `json:"token"`
+		User  struct {
+			ID int64 `json:"id"`
+		} `json:"user"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &authResp)
+
+	w = doReq(t, h, "POST", "/api/accounts", authResp.Token, map[string]interface{}{
+		"label":         "Gmail",
+		"email_address": "syncuser@gmail.com",
+		"password":      "secret",
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create account status=%d body=%s", w.Code, w.Body.String())
+	}
+	var acctResp struct {
+		ID int64 `json:"id"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &acctResp)
+
+	w = doReq(t, h, "POST", "/api/tags", authResp.Token, map[string]string{
+		"name":  "同步测试标签",
+		"color": "#10b981",
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create tag status=%d body=%s", w.Code, w.Body.String())
+	}
+	var tagResp struct {
+		ID int64 `json:"id"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &tagResp)
+
+	var inboxID int64
+	if err := conn.QueryRow(`SELECT id FROM folders WHERE account_id = ? AND role = 'inbox' LIMIT 1`, acctResp.ID).Scan(&inboxID); err != nil {
+		t.Fatalf("find inbox folder: %v", err)
+	}
+	resF, err := conn.Exec(`INSERT INTO folders (account_id, name, remote_name, role) VALUES (?, '所有邮件', '[Gmail]/所有邮件', 'custom')`, acctResp.ID)
+	if err != nil {
+		t.Fatalf("insert virtual folder: %v", err)
+	}
+	virtualFolderID, _ := resF.LastInsertId()
+
+	// 在收件箱和虚拟文件夹各插入一条同 Message-ID 的未读副本，验证 PatchMessage 跨副本联动已读
+	res1, err := conn.Exec(`
+		INSERT INTO messages (user_id, account_id, folder_id, message_id_header, subject, from_addr, to_addrs, is_read, sent_at, received_at)
+		VALUES (?, ?, ?, '<dup-1@gmail.com>', 'Dup Subject', 'a@b.com', 'syncuser@gmail.com', 0, '2026-11-26 01:00:00', '2026-11-26 01:00:00')`,
+		authResp.User.ID, acctResp.ID, inboxID)
+	if err != nil {
+		t.Fatalf("insert inbox dup: %v", err)
+	}
+	inboxMsgID, _ := res1.LastInsertId()
+
+	res2, err := conn.Exec(`
+		INSERT INTO messages (user_id, account_id, folder_id, message_id_header, subject, from_addr, to_addrs, is_read, sent_at, received_at)
+		VALUES (?, ?, ?, '<dup-1@gmail.com>', 'Dup Subject', 'a@b.com', 'syncuser@gmail.com', 0, '2026-11-26 01:00:00', '2026-11-26 01:00:00')`,
+		authResp.User.ID, acctResp.ID, virtualFolderID)
+	if err != nil {
+		t.Fatalf("insert virtual dup: %v", err)
+	}
+	virtualMsgID, _ := res2.LastInsertId()
+	_, _ = conn.Exec(`INSERT INTO message_tags (message_id, tag_id) VALUES (?, ?)`, virtualMsgID, tagResp.ID)
+
+	// 插入一条仅存在于“[Gmail]/所有邮件”的归档唯一邮件，验证迁移时会保留进 archive 文件夹
+	_, err = conn.Exec(`
+		INSERT INTO messages (user_id, account_id, folder_id, message_id_header, subject, from_addr, to_addrs, is_read, sent_at, received_at)
+		VALUES (?, ?, ?, '<unique-arch@gmail.com>', 'Archived Only', 'a@b.com', 'syncuser@gmail.com', 0, '2026-11-26 00:00:00', '2026-11-26 00:00:00')`,
+		authResp.User.ID, acctResp.ID, virtualFolderID)
+	if err != nil {
+		t.Fatalf("insert unique archive msg: %v", err)
+	}
+
+	// 将收件箱副本标为已读 -> 虚拟副本也应同步已读且统计归零
+	w = doReq(t, h, "PATCH", fmt.Sprintf("/api/messages/%d", inboxMsgID), authResp.Token, map[string]bool{"is_read": true})
+	if w.Code != http.StatusOK {
+		t.Fatalf("patch message status=%d", w.Code)
+	}
+	var virtualIsRead int
+	_ = conn.QueryRow(`SELECT is_read FROM messages WHERE id = ?`, virtualMsgID).Scan(&virtualIsRead)
+	if virtualIsRead != 1 {
+		t.Fatalf("expected virtual copy is_read=1, got %d", virtualIsRead)
+	}
+
+	// 运行迁移清理虚拟聚合文件夹：合并标签到收件箱真身、删重并把唯一邮件迁入 archive
+	if err := db.Migrate(conn); err != nil {
+		t.Fatalf("db.Migrate failed: %v", err)
+	}
+	var vFolderCnt int
+	_ = conn.QueryRow(`SELECT COUNT(*) FROM folders WHERE id = ?`, virtualFolderID).Scan(&vFolderCnt)
+	if vFolderCnt != 0 {
+		t.Fatalf("expected virtual folder deleted, still exists")
+	}
+	var tagOnReal int
+	_ = conn.QueryRow(`SELECT COUNT(*) FROM message_tags WHERE message_id = ? AND tag_id = ?`, inboxMsgID, tagResp.ID).Scan(&tagOnReal)
+	if tagOnReal != 1 {
+		t.Fatalf("expected tag migrated to real inbox message")
+	}
+	var archRole string
+	_ = conn.QueryRow(`SELECT f.role FROM messages m JOIN folders f ON f.id = m.folder_id WHERE m.message_id_header = '<unique-arch@gmail.com>'`).Scan(&archRole)
+	if archRole != "archive" {
+		t.Fatalf("expected unique archived message moved to archive role, got %q", archRole)
+	}
+}

@@ -148,7 +148,7 @@ class ApiClient {
     bool hasAttachments = false,
     String q = '',
     int page = 1,
-    int pageSize = 30,
+    int pageSize = 50,
   }) async {
     final resp = await _dio.get('/api/messages', queryParameters: {
       'view': view,

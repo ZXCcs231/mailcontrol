@@ -210,6 +210,7 @@ CREATE INDEX IF NOT EXISTS idx_rules_user ON rules(user_id, enabled, priority);
 		  AND NOT EXISTS (SELECT 1 FROM users WHERE is_admin = 1)`)
 
 	fixDirtyMessageTimestamps(conn)
+	cleanupVirtualAggregateFolders(conn)
 	return nil
 }
 
@@ -307,4 +308,103 @@ func fixDirtyMessageTimestamps(conn *sql.DB) {
 	for _, f := range fixes {
 		_, _ = conn.Exec(`UPDATE messages SET sent_at = ?, received_at = ? WHERE id = ?`, f.sentAt, f.recvAt, f.id)
 	}
+}
+
+func cleanupVirtualAggregateFolders(conn *sql.DB) {
+	rows, err := conn.Query(`
+		SELECT id, account_id
+		FROM folders
+		WHERE LOWER(TRIM(remote_name)) IN (
+			'[gmail]/all mail', '[gmail]/所有邮件',
+			'[gmail]/important', '[gmail]/重要',
+			'[gmail]/starred', '[gmail]/已加星标'
+		)`)
+	if err != nil {
+		return
+	}
+	type vFolder struct {
+		id        int64
+		accountID int64
+	}
+	var vFolders []vFolder
+	for rows.Next() {
+		var vf vFolder
+		if rows.Scan(&vf.id, &vf.accountID) == nil {
+			vFolders = append(vFolders, vf)
+		}
+	}
+	_ = rows.Close()
+	if len(vFolders) == 0 {
+		return
+	}
+
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(vFolders)), ",")
+	vIDArgs := make([]any, len(vFolders))
+	for i, vf := range vFolders {
+		vIDArgs[i] = vf.id
+	}
+
+	type vMsg struct {
+		id          int64
+		accountID   int64
+		folderID    int64
+		msgIDHeader string
+		isRead      int
+		isStarred   int
+	}
+	msgRows, err := conn.Query(
+		`SELECT id, account_id, folder_id, message_id_header, is_read, is_starred FROM messages WHERE folder_id IN (`+placeholders+`)`,
+		vIDArgs...,
+	)
+	if err != nil {
+		return
+	}
+	var vMsgs []vMsg
+	for msgRows.Next() {
+		var vm vMsg
+		if msgRows.Scan(&vm.id, &vm.accountID, &vm.folderID, &vm.msgIDHeader, &vm.isRead, &vm.isStarred) == nil {
+			vMsgs = append(vMsgs, vm)
+		}
+	}
+	_ = msgRows.Close()
+
+	for _, vm := range vMsgs {
+		var realID int64
+		if vm.msgIDHeader != "" {
+			queryArgs := append([]any{vm.accountID, vm.msgIDHeader}, vIDArgs...)
+			_ = conn.QueryRow(
+				`SELECT id FROM messages WHERE account_id = ? AND message_id_header = ? AND folder_id NOT IN (`+placeholders+`) ORDER BY id ASC LIMIT 1`,
+				queryArgs...,
+			).Scan(&realID)
+		}
+
+		if realID > 0 {
+			if vm.isRead == 1 || vm.isStarred == 1 {
+				_, _ = conn.Exec(`
+					UPDATE messages
+					SET is_read = CASE WHEN ? = 1 THEN 1 ELSE is_read END,
+					    is_starred = CASE WHEN ? = 1 THEN 1 ELSE is_starred END
+					WHERE id = ?`, vm.isRead, vm.isStarred, realID)
+			}
+			_, _ = conn.Exec(`INSERT OR IGNORE INTO message_tags (message_id, tag_id) SELECT ?, tag_id FROM message_tags WHERE message_id = ?`, realID, vm.id)
+			_, _ = conn.Exec(`DELETE FROM messages WHERE id = ?`, vm.id)
+		} else {
+			// 将仅存在于“所有邮件”等聚合目录中的唯一邮件平滑归入归档文件夹，避免丢邮件
+			var archiveID int64
+			_ = conn.QueryRow(`SELECT id FROM folders WHERE account_id = ? AND role = 'archive' ORDER BY id ASC LIMIT 1`, vm.accountID).Scan(&archiveID)
+			if archiveID == 0 {
+				_, _ = conn.Exec(`INSERT OR IGNORE INTO folders (account_id, name, remote_name, role) VALUES (?, '归档', 'Archive', 'archive')`, vm.accountID)
+				_ = conn.QueryRow(`SELECT id FROM folders WHERE account_id = ? AND role = 'archive' ORDER BY id ASC LIMIT 1`, vm.accountID).Scan(&archiveID)
+			}
+			if archiveID > 0 {
+				_, _ = conn.Exec(`UPDATE messages SET folder_id = ? WHERE id = ?`, archiveID, vm.id)
+			}
+		}
+	}
+
+	_, _ = conn.Exec(`DELETE FROM folders WHERE id IN (`+placeholders+`)`, vIDArgs...)
+	_, _ = conn.Exec(`
+		UPDATE folders
+		SET total_count = (SELECT COUNT(*) FROM messages WHERE folder_id = folders.id),
+		    unread_count = (SELECT COUNT(*) FROM messages WHERE folder_id = folders.id AND is_read = 0)`)
 }
