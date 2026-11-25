@@ -166,6 +166,18 @@ CREATE TABLE IF NOT EXISTS signatures (
 	FOREIGN KEY(account_id) REFERENCES mail_accounts(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS message_translations (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	message_id INTEGER NOT NULL,
+	target_lang TEXT NOT NULL,
+	provider TEXT NOT NULL DEFAULT '',
+	translated_subject TEXT NOT NULL DEFAULT '',
+	translated_text TEXT NOT NULL DEFAULT '',
+	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	UNIQUE(message_id, target_lang),
+	FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_accounts_user ON mail_accounts(user_id);
 CREATE INDEX IF NOT EXISTS idx_folders_account ON folders(account_id, role);
 CREATE INDEX IF NOT EXISTS idx_messages_user_recv ON messages(user_id, received_at DESC);

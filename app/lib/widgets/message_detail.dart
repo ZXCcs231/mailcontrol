@@ -34,6 +34,34 @@ class MessageDetailView extends ConsumerStatefulWidget {
 class _MessageDetailViewState extends ConsumerState<MessageDetailView> {
   bool _preferPlain = false;
   int? _downloadingAttId;
+  bool _translating = false;
+  bool _onlyTranslation = false;
+  int? _lastMsgId;
+  MessageTranslation? _translation;
+
+  Future<void> _translate(MailMessage msg, String targetLang, {bool force = false}) async {
+    setState(() => _translating = true);
+    try {
+      final res = await ref.read(apiClientProvider).translateMessage(msg.id, targetLang, force: force);
+      if (mounted) {
+        setState(() {
+          _translation = res;
+          _translating = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _translating = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ref.read(apiClientProvider).extractError(e))),
+        );
+      }
+    }
+  }
+
+  String _langName(String code) {
+    return kTranslateLanguages.where((l) => l.code == code).firstOrNull?.name ?? code;
+  }
 
   Future<void> _downloadAndOpen(MailAttachment att) async {
     setState(() => _downloadingAttId = att.id);
@@ -91,6 +119,11 @@ class _MessageDetailViewState extends ConsumerState<MessageDetailView> {
 
     final acctColor = parseHexColor(msg.accountColor);
     final visibleAttachments = msg.attachments.where((a) => !a.isInline).toList();
+    if (_lastMsgId != msg.id) {
+      _lastMsgId = msg.id;
+      _translation = null;
+      _onlyTranslation = false;
+    }
 
     return Column(
       children: [
@@ -130,6 +163,30 @@ class _MessageDetailViewState extends ConsumerState<MessageDetailView> {
                 ),
               ],
               const Spacer(),
+              PopupMenuButton<String>(
+                tooltip: '翻译邮件',
+                enabled: !_translating,
+                icon: _translating
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.translate_rounded),
+                onSelected: (lang) => _translate(msg, lang),
+                itemBuilder: (_) => [
+                  for (final lang in kTranslateLanguages)
+                    PopupMenuItem<String>(
+                      value: lang.code,
+                      child: Row(
+                        children: [
+                          if (_translation?.targetLang == lang.code)
+                            Icon(Icons.check_rounded, size: 16, color: scheme.primary)
+                          else
+                            const SizedBox(width: 16),
+                          const SizedBox(width: 8),
+                          Text('翻译为 ${lang.name}'),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
               IconButton(
                 tooltip: msg.isStarred ? '取消星标' : '加星标',
                 onPressed: () => notifier.toggleStar(msg),
@@ -309,24 +366,89 @@ class _MessageDetailViewState extends ConsumerState<MessageDetailView> {
                     child: Divider(),
                   ),
                 ],
-                if (!_preferPlain && msg.bodyHtml.isNotEmpty)
-                  SelectionArea(
-                    child: HtmlWidget(
-                      msg.bodyHtml,
-                      onTapUrl: (url) async {
-                        final uri = Uri.tryParse(url);
-                        if (uri != null) {
-                          await launchUrl(uri, mode: LaunchMode.externalApplication);
-                        }
-                        return true;
-                      },
+                if (_translation != null) ...[
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: scheme.primaryContainer.withValues(alpha: 0.35),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: scheme.primary.withValues(alpha: 0.3)),
                     ),
-                  )
-                else
-                  SelectableText(
-                    msg.bodyText.isNotEmpty ? msg.bodyText : '（邮件正文为空）',
-                    style: const TextStyle(fontSize: 14.5, height: 1.6),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.translate_rounded, size: 17, color: scheme.primary),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                '译文（${_langName(_translation!.targetLang)} · ${_translation!.provider}${_translation!.cached ? " · 已缓存" : ""}）',
+                                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: scheme.primary),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () => setState(() => _onlyTranslation = !_onlyTranslation),
+                              child: Text(_onlyTranslation ? '显示原文' : '仅看译文', style: const TextStyle(fontSize: 12)),
+                            ),
+                            IconButton(
+                              tooltip: '重新翻译',
+                              icon: const Icon(Icons.refresh_rounded, size: 17),
+                              visualDensity: VisualDensity.compact,
+                              onPressed: _translating ? null : () => _translate(msg, _translation!.targetLang, force: true),
+                            ),
+                            IconButton(
+                              tooltip: '关闭译文',
+                              icon: const Icon(Icons.close_rounded, size: 17),
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () => setState(() {
+                                _translation = null;
+                                _onlyTranslation = false;
+                              }),
+                            ),
+                          ],
+                        ),
+                        if (_translation!.translatedSubject.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          SelectableText(
+                            '主题：${_translation!.translatedSubject}',
+                            style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700),
+                          ),
+                        ],
+                        if (_translation!.translatedText.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          SelectableText(
+                            _translation!.translatedText,
+                            style: const TextStyle(fontSize: 14.5, height: 1.6),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
+                ],
+                if (!_onlyTranslation) ...[
+                  if (!_preferPlain && msg.bodyHtml.isNotEmpty)
+                    SelectionArea(
+                      child: HtmlWidget(
+                        msg.bodyHtml,
+                        onTapUrl: (url) async {
+                          final uri = Uri.tryParse(url);
+                          if (uri != null) {
+                            await launchUrl(uri, mode: LaunchMode.externalApplication);
+                          }
+                          return true;
+                        },
+                      ),
+                    )
+                  else
+                    SelectableText(
+                      msg.bodyText.isNotEmpty ? msg.bodyText : '（邮件正文为空）',
+                      style: const TextStyle(fontSize: 14.5, height: 1.6),
+                    ),
+                ],
               ],
             ),
           ),

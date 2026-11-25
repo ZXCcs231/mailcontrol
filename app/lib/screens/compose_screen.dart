@@ -33,7 +33,72 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   bool _showCcBcc = false;
   bool _sending = false;
   bool _savingDraft = false;
+  bool _translating = false;
   final List<({String name, String path, int size})> _attachments = [];
+
+  Future<void> _translateCompose(String targetLang) async {
+    if (_bodyCtrl.text.trim().isEmpty && _subjectCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先输入邮件主题或正文')));
+      return;
+    }
+    setState(() => _translating = true);
+    try {
+      final res = await ref.read(apiClientProvider).translateText(
+            subject: _subjectCtrl.text.trim(),
+            text: _bodyCtrl.text,
+            targetLang: targetLang,
+          );
+      if (!mounted) return;
+      setState(() => _translating = false);
+
+      final action = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('译文预览（${res.provider}）'),
+          content: SizedBox(
+            width: 480,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (res.translatedSubject.isNotEmpty) ...[
+                    Text('主题：${res.translatedSubject}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 10),
+                  ],
+                  SelectableText(res.translatedText.isEmpty ? '（无正文译文）' : res.translatedText),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
+            OutlinedButton(onPressed: () => Navigator.pop(ctx, 'append'), child: const Text('追加到原文下方')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, 'replace'), child: const Text('替换原文')),
+          ],
+        ),
+      );
+      if (action == 'replace') {
+        setState(() {
+          if (res.translatedSubject.isNotEmpty) _subjectCtrl.text = res.translatedSubject;
+          if (res.translatedText.isNotEmpty) _bodyCtrl.text = res.translatedText;
+        });
+      } else if (action == 'append') {
+        setState(() {
+          if (res.translatedText.isNotEmpty) {
+            _bodyCtrl.text = '${_bodyCtrl.text}\n\n---\n${res.translatedText}';
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _translating = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ref.read(apiClientProvider).extractError(e))),
+        );
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -297,30 +362,49 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
             decoration: const InputDecoration(labelText: '邮件主题', isDense: true),
           ),
           const SizedBox(height: 10),
-          Row(
-            children: [
-              OutlinedButton.icon(
-                onPressed: _pickFiles,
-                icon: const Icon(Icons.attach_file_rounded, size: 17),
-                label: const Text('添加附件'),
-              ),
-              const SizedBox(width: 8),
-              if (sigs.isNotEmpty)
-                PopupMenuButton<MailSignature>(
-                  onSelected: (s) {
-                    setState(() {
-                      _bodyCtrl.text = '${_bodyCtrl.text}\n\n--\n${_stripHtml(s.contentHtml)}';
-                    });
-                  },
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _pickFiles,
+                  icon: const Icon(Icons.attach_file_rounded, size: 17),
+                  label: const Text('添加附件'),
+                ),
+                if (sigs.isNotEmpty)
+                  PopupMenuButton<MailSignature>(
+                    onSelected: (s) {
+                      setState(() {
+                        _bodyCtrl.text = '${_bodyCtrl.text}\n\n--\n${_stripHtml(s.contentHtml)}';
+                      });
+                    },
+                    itemBuilder: (_) => [
+                      for (final s in sigs) PopupMenuItem(value: s, child: Text('插入签名：${s.name}')),
+                    ],
+                    child: const Chip(
+                      avatar: Icon(Icons.draw_outlined, size: 16),
+                      label: Text('插入签名'),
+                    ),
+                  ),
+                PopupMenuButton<String>(
+                  enabled: !_translating,
+                  onSelected: _translateCompose,
                   itemBuilder: (_) => [
-                    for (final s in sigs) PopupMenuItem(value: s, child: Text('插入签名：${s.name}')),
+                    for (final lang in kTranslateLanguages)
+                      PopupMenuItem<String>(value: lang.code, child: Text('翻译为 ${lang.name}')),
                   ],
-                  child: const Chip(
-                    avatar: Icon(Icons.draw_outlined, size: 16),
-                    label: Text('插入签名'),
+                  child: Chip(
+                    avatar: _translating
+                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.translate_rounded, size: 16),
+                    label: Text(_translating ? '翻译中...' : '翻译正文'),
                   ),
                 ),
-            ],
+              ],
+            ),
           ),
           if (_attachments.isNotEmpty) ...[
             const SizedBox(height: 8),

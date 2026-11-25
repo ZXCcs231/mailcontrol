@@ -7,6 +7,7 @@ import (
 
 	"mailcontrol-backend/internal/config"
 	"mailcontrol-backend/internal/syncer"
+	"mailcontrol-backend/internal/translator"
 )
 
 // NewRouter 装配所有 API 路由及中间件。
@@ -16,10 +17,11 @@ func NewRouter(conn *sql.DB, cfg *config.Config, hub *syncer.Hub, scheduler *syn
 	r.Use(gin.Recovery(), CORSMiddleware())
 
 	srv := &Server{
-		DB:        conn,
-		Cfg:       cfg,
-		Hub:       hub,
-		Scheduler: scheduler,
+		DB:         conn,
+		Cfg:        cfg,
+		Hub:        hub,
+		Scheduler:  scheduler,
+		Translator: translator.New(),
 	}
 
 	apiGroup := r.Group("/api")
@@ -70,6 +72,10 @@ func NewRouter(conn *sql.DB, cfg *config.Config, hub *syncer.Hub, scheduler *syn
 			auth.POST("/signatures", srv.CreateSignature)
 			auth.PUT("/signatures/:id", srv.UpdateSignature)
 			auth.DELETE("/signatures/:id", srv.DeleteSignature)
+
+			auth.GET("/translate/languages", srv.GetTranslateLanguages)
+			auth.POST("/translate/text", srv.TranslateText)
+			auth.POST("/messages/:id/translate", srv.TranslateMessage)
 
 			auth.GET("/events", srv.Events)
 		}

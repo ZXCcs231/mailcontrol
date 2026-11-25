@@ -10,14 +10,16 @@ import (
 	"mailcontrol-backend/internal/config"
 	"mailcontrol-backend/internal/crypto"
 	"mailcontrol-backend/internal/syncer"
+	"mailcontrol-backend/internal/translator"
 )
 
 // Server 聚合 API 处理所需的依赖。
 type Server struct {
-	DB        *sql.DB
-	Cfg       *config.Config
-	Hub       *syncer.Hub
-	Scheduler *syncer.Scheduler
+	DB         *sql.DB
+	Cfg        *config.Config
+	Hub        *syncer.Hub
+	Scheduler  *syncer.Scheduler
+	Translator *translator.Translator
 }
 
 // CORSMiddleware 允许客户端跨域及携带认证头请求。

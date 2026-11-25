@@ -319,4 +319,36 @@ class ApiClient {
   Future<void> deleteSignature(int id) async {
     await _dio.delete('/api/signatures/$id');
   }
+
+  Future<List<TranslateLanguage>> getTranslateLanguages() async {
+    final resp = await _dio.get('/api/translate/languages');
+    final list = (resp.data['items'] as List?) ?? const [];
+    return list.map((e) => TranslateLanguage.fromJson(Map<String, dynamic>.from(e))).toList();
+  }
+
+  Future<MessageTranslation> translateMessage(
+    int messageId,
+    String targetLang, {
+    bool force = false,
+  }) async {
+    final resp = await _dio.post(
+      '/api/messages/$messageId/translate',
+      data: {'target_lang': targetLang, 'force': force},
+      options: Options(receiveTimeout: const Duration(seconds: 60)),
+    );
+    return MessageTranslation.fromJson(Map<String, dynamic>.from(resp.data));
+  }
+
+  Future<MessageTranslation> translateText({
+    required String text,
+    String subject = '',
+    required String targetLang,
+  }) async {
+    final resp = await _dio.post(
+      '/api/translate/text',
+      data: {'text': text, 'subject': subject, 'target_lang': targetLang},
+      options: Options(receiveTimeout: const Duration(seconds: 60)),
+    );
+    return MessageTranslation.fromJson(Map<String, dynamic>.from(resp.data));
+  }
 }

@@ -459,3 +459,56 @@ class SseEvent {
         message: _asStr(j['message']),
       );
 }
+
+class TranslateLanguage {
+  final String code;
+  final String name;
+
+  const TranslateLanguage({required this.code, required this.name});
+
+  factory TranslateLanguage.fromJson(Map<String, dynamic> j) => TranslateLanguage(
+        code: _asStr(j['code']),
+        name: _asStr(j['name']),
+      );
+}
+
+const kTranslateLanguages = <TranslateLanguage>[
+  TranslateLanguage(code: 'zh-CN', name: '简体中文'),
+  TranslateLanguage(code: 'zh-TW', name: '繁体中文'),
+  TranslateLanguage(code: 'en', name: '英语'),
+  TranslateLanguage(code: 'ja', name: '日语'),
+  TranslateLanguage(code: 'ko', name: '韩语'),
+  TranslateLanguage(code: 'fr', name: '法语'),
+  TranslateLanguage(code: 'de', name: '德语'),
+  TranslateLanguage(code: 'es', name: '西班牙语'),
+  TranslateLanguage(code: 'ru', name: '俄语'),
+  TranslateLanguage(code: 'pt', name: '葡萄牙语'),
+  TranslateLanguage(code: 'ar', name: '阿拉伯语'),
+];
+
+class MessageTranslation {
+  final int messageId;
+  final String targetLang;
+  final String provider;
+  final String translatedSubject;
+  final String translatedText;
+  final bool cached;
+
+  MessageTranslation({
+    this.messageId = 0,
+    required this.targetLang,
+    required this.provider,
+    required this.translatedSubject,
+    required this.translatedText,
+    this.cached = false,
+  });
+
+  factory MessageTranslation.fromJson(Map<String, dynamic> j) => MessageTranslation(
+        messageId: _asInt(j['message_id']),
+        targetLang: _asStr(j['target_lang']),
+        provider: _asStr(j['provider']),
+        translatedSubject: _asStr(j['translated_subject']),
+        translatedText: _asStr(j['translated_text']),
+        cached: _asBool(j['cached']),
+      );
+}
