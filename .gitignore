@@ -1,0 +1,40 @@
+# Data & Secrets
+backend/data/
+data/
+secrets.json
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+
+# Binaries & Build Outputs
+*.exe
+*.dll
+*.so
+*.dylib
+*.apk
+*.aab
+build/
+dist/
+
+# Go
+backend/mailcontrol-server*
+
+# Flutter / Dart
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/.packages
+app/build/
+app/windows/flutter/ephemeral/
+app/android/.gradle/
+app/android/local.properties
+app/android/app/debug/
+app/android/app/release/
+*.iml
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
