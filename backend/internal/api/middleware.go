@@ -67,3 +67,24 @@ func currentUserID(c *gin.Context) int64 {
 	id, _ := v.(int64)
 	return id
 }
+
+// SyncBroadcastMiddleware 在任意写接口成功后向同账号其它在线端广播 data_changed。
+func (s *Server) SyncBroadcastMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Next()
+		m := c.Request.Method
+		if m != http.MethodPost && m != http.MethodPut && m != http.MethodPatch && m != http.MethodDelete {
+			return
+		}
+		if c.Writer.Status() >= 400 {
+			return
+		}
+		path := c.Request.URL.Path
+		if strings.HasPrefix(path, "/api/accounts/test") || strings.Contains(path, "/sync") || strings.HasPrefix(path, "/api/translate/text") {
+			return
+		}
+		if uid := currentUserID(c); uid > 0 {
+			s.Hub.Publish(uid, syncer.Event{Type: "data_changed"})
+		}
+	}
+}

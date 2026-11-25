@@ -2,6 +2,8 @@ package api
 
 import (
 	"database/sql"
+	"fmt"
+	"net"
 	"net/http"
 	"strings"
 
@@ -136,4 +138,39 @@ func (s *Server) Me(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, user)
+}
+
+func (s *Server) ServerInfo(c *gin.Context) {
+	urls := make([]string, 0)
+	ifaces, err := net.Interfaces()
+	if err == nil {
+		for _, iface := range ifaces {
+			if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+				continue
+			}
+			addrs, err := iface.Addrs()
+			if err != nil {
+				continue
+			}
+			for _, addr := range addrs {
+				var ip net.IP
+				switch v := addr.(type) {
+				case *net.IPNet:
+					ip = v.IP
+				case *net.IPAddr:
+					ip = v.IP
+				}
+				if ip == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+					continue
+				}
+				if ip4 := ip.To4(); ip4 != nil {
+					urls = append(urls, fmt.Sprintf("http://%s:%s", ip4.String(), s.Cfg.Port))
+				}
+			}
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"port":     s.Cfg.Port,
+		"lan_urls": urls,
+	})
 }

@@ -32,9 +32,10 @@ func NewRouter(conn *sql.DB, cfg *config.Config, hub *syncer.Hub, scheduler *syn
 		apiGroup.POST("/auth/login", srv.Login)
 
 		auth := apiGroup.Group("")
-		auth.Use(srv.AuthMiddleware())
+		auth.Use(srv.AuthMiddleware(), srv.SyncBroadcastMiddleware())
 		{
 			auth.GET("/auth/me", srv.Me)
+			auth.GET("/server-info", srv.ServerInfo)
 
 			auth.GET("/accounts", srv.ListAccounts)
 			auth.POST("/accounts", srv.CreateAccount)

@@ -82,6 +82,12 @@ class ApiClient {
     return AppUser.fromJson(Map<String, dynamic>.from(resp.data));
   }
 
+  Future<List<String>> getServerLanUrls() async {
+    final resp = await _dio.get('/api/server-info');
+    final list = (resp.data['lan_urls'] as List?) ?? const [];
+    return list.map((e) => e.toString()).toList();
+  }
+
   Future<List<ProviderPreset>> getProviders() async {
     final resp = await _dio.get('/api/providers');
     final list = (resp.data['items'] as List?) ?? const [];

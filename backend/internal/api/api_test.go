@@ -189,4 +189,14 @@ func TestEndToEndFlow(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("stats status=%d", w.Code)
 	}
+
+	w = doReq(t, h, "GET", "/api/server-info", authResp.Token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("server-info status=%d", w.Code)
+	}
+
+	w = doReq(t, h, "GET", "/api/translate/languages", authResp.Token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("translate languages status=%d", w.Code)
+	}
 }

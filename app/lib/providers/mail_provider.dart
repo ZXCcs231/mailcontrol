@@ -326,6 +326,9 @@ class MailNotifier extends Notifier<MailState> {
     } else if (evt.type == 'sync_error') {
       state = state.copyWith(syncing: false, toastMessage: '${evt.label} 同步异常：${evt.message}');
       refreshMetadata();
+    } else if (evt.type == 'data_changed') {
+      refreshMetadata();
+      loadMessages(silent: true);
     }
   }
 

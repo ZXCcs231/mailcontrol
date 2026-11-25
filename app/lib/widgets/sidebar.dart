@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -284,10 +285,22 @@ class _SidebarState extends ConsumerState<Sidebar> {
                       style: const TextStyle(fontSize: 11),
                       overflow: TextOverflow.ellipsis,
                     ),
-                    trailing: IconButton(
-                      tooltip: '退出登录',
-                      onPressed: () => ref.read(authProvider.notifier).logout(),
-                      icon: const Icon(Icons.logout_rounded, size: 18),
+                    trailing: Wrap(
+                      spacing: 0,
+                      children: [
+                        IconButton(
+                          tooltip: '多端同步与连接地址',
+                          onPressed: () => _showSyncDialog(context),
+                          icon: const Icon(Icons.devices_rounded, size: 18),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        IconButton(
+                          tooltip: '退出登录',
+                          onPressed: () => ref.read(authProvider.notifier).logout(),
+                          icon: const Icon(Icons.logout_rounded, size: 18),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -295,6 +308,65 @@ class _SidebarState extends ConsumerState<Sidebar> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Future<void> _showSyncDialog(BuildContext context) async {
+    final auth = ref.read(authProvider);
+    List<String> lanUrls = [];
+    try {
+      lanUrls = await ref.read(apiClientProvider).getServerLanUrls();
+    } catch (_) {}
+    if (!context.mounted) return;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.devices_rounded),
+            SizedBox(width: 8),
+            Text('多端账号同步'),
+          ],
+        ),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '同一 MailControl 账号在 Windows 端与手机 App 上共享全部已绑定邮箱、邮件、草稿、标签、自动规则、签名与翻译缓存，无需重复录入，修改后实时自动同步。',
+                style: TextStyle(fontSize: 13.5, height: 1.5),
+              ),
+              const SizedBox(height: 12),
+              Text('当前连接地址：${auth.baseUrl}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              if (lanUrls.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const Text('手机端可填写以下局域网地址连接本机：', style: TextStyle(fontSize: 12.5)),
+                const SizedBox(height: 6),
+                for (final u in lanUrls)
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: SelectableText(u, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    trailing: IconButton(
+                      tooltip: '复制地址',
+                      icon: const Icon(Icons.copy_rounded, size: 18),
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: u));
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已复制：$u')));
+                      },
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('知道了')),
+        ],
       ),
     );
   }
