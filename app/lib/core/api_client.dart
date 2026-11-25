@@ -33,6 +33,9 @@ class ApiClient {
       if (data is Map && data['error'] != null) {
         return data['error'].toString();
       }
+      if (err.response?.statusCode == 404) {
+        return '接口不存在（404），请确认后端服务已重启更新到最新版本';
+      }
       if (err.type == DioExceptionType.connectionError || err.type == DioExceptionType.connectionTimeout) {
         return '无法连接到后端服务（$_baseUrl），请确认服务已启动且地址正确';
       }
