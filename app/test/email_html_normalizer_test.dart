@@ -13,7 +13,7 @@ const _googleSecurityAlertHtml = '''
           <td width="8" style="width: 8px;"></td>
           <td>
             <div style="background-color: #f5f5f5; padding: 12px 16px; font-size: 13px; color: #5f6368;">
-              <p>dujunbo517@gmail.com 的安全提醒转发邮件。如果不需要转发，请<a href="https://accounts.google.com">移除</a>您的邮箱。</p>
+              <p>user@example.com 的安全提醒转发邮件。如果不需要转发，请<a href="https://accounts.google.com">移除</a>您的邮箱。</p>
             </div>
             <div style="border-style: solid; border-width: thin; border-color: #dadce0; border-radius: 8px; padding: 40px 20px;" align="center">
               <img src="https://www.gstatic.com/images/branding/googlelogo/2x/googlelogo_color_74x24dp.png" width="74" height="24" alt="Google">
