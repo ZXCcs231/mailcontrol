@@ -223,6 +223,36 @@ class AppTheme {
         selectionColor: p.accent.withValues(alpha: 0.18),
         cursorColor: p.accent,
       ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: p.surfaceElevated,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: p.borderSubtle),
+        ),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: p.surfaceElevated,
+        surfaceTintColor: Colors.transparent,
+        elevation: 6,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: p.borderSubtle),
+        ),
+      ),
+      dropdownMenuTheme: DropdownMenuThemeData(
+        menuStyle: MenuStyle(
+          backgroundColor: WidgetStateProperty.all(p.surfaceElevated),
+          surfaceTintColor: WidgetStateProperty.all(Colors.transparent),
+          elevation: WidgetStateProperty.all(6),
+          shape: WidgetStateProperty.all(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(color: p.borderSubtle),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -300,6 +330,36 @@ class AppTheme {
       textSelectionTheme: TextSelectionThemeData(
         selectionColor: p.accent.withValues(alpha: 0.25),
         cursorColor: p.accent,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: p.surfaceElevated,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: p.borderSubtle),
+        ),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: p.surfaceElevated,
+        surfaceTintColor: Colors.transparent,
+        elevation: 6,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: p.borderSubtle),
+        ),
+      ),
+      dropdownMenuTheme: DropdownMenuThemeData(
+        menuStyle: MenuStyle(
+          backgroundColor: WidgetStateProperty.all(p.surfaceElevated),
+          surfaceTintColor: WidgetStateProperty.all(Colors.transparent),
+          elevation: WidgetStateProperty.all(6),
+          shape: WidgetStateProperty.all(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(color: p.borderSubtle),
+            ),
+          ),
+        ),
       ),
     );
   }

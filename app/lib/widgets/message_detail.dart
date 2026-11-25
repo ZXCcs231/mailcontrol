@@ -160,10 +160,7 @@ class _MessageDetailViewState extends ConsumerState<MessageDetailView> {
         children: [
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: pal.listBg,
-              border: Border(bottom: BorderSide(color: pal.borderSubtle)),
-            ),
+            color: pal.readingBg,
             child: Row(
               children: [
                 if (widget.isStandalone)

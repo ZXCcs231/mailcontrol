@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import '../core/theme.dart';
 import '../models/models.dart';
 import '../providers/mail_provider.dart';
+import '../widgets/brand_widgets.dart';
 
 class RulesScreen extends ConsumerWidget {
   final bool isDialog;
@@ -147,7 +148,6 @@ class RulesScreen extends ConsumerWidget {
             ],
           ),
         ),
-        const Divider(),
         Expanded(
           child: mail.rules.isEmpty
               ? Center(
@@ -326,8 +326,8 @@ class _RuleEditorDialogState extends ConsumerState<_RuleEditorDialog> {
                 decoration: const InputDecoration(labelText: '规则名称', hintText: '如：GitHub 通知自动归档'),
               ),
               const SizedBox(height: 10),
-              DropdownButtonFormField<int?>(
-                initialValue: _accountId,
+              AppDropdownField<int?>(
+                value: _accountId,
                 decoration: const InputDecoration(labelText: '适用邮箱', isDense: true),
                 items: [
                   const DropdownMenuItem(value: null, child: Text('全部已绑定邮箱')),
@@ -339,8 +339,8 @@ class _RuleEditorDialogState extends ConsumerState<_RuleEditorDialog> {
               Row(
                 children: [
                   Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _condField,
+                    child: AppDropdownField<String>(
+                      value: _condField,
                       decoration: const InputDecoration(labelText: '字段', isDense: true),
                       items: const [
                         DropdownMenuItem(value: 'from', child: Text('发件人')),
@@ -353,8 +353,8 @@ class _RuleEditorDialogState extends ConsumerState<_RuleEditorDialog> {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _condOp,
+                    child: AppDropdownField<String>(
+                      value: _condOp,
                       decoration: const InputDecoration(labelText: '条件', isDense: true),
                       items: const [
                         DropdownMenuItem(value: 'contains', child: Text('包含')),
@@ -374,8 +374,8 @@ class _RuleEditorDialogState extends ConsumerState<_RuleEditorDialog> {
                 decoration: const InputDecoration(labelText: '匹配关键词 / 邮箱', isDense: true),
               ),
               const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue: _actionType,
+              AppDropdownField<String>(
+                value: _actionType,
                 decoration: const InputDecoration(labelText: '执行动作', isDense: true),
                 items: const [
                   DropdownMenuItem(value: 'mark_read', child: Text('自动标为已读')),
@@ -392,8 +392,8 @@ class _RuleEditorDialogState extends ConsumerState<_RuleEditorDialog> {
               ),
               if (_actionType == 'add_tag' && mail.tags.isNotEmpty) ...[
                 const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: mail.tags.any((t) => t.id.toString() == _actionValue)
+                AppDropdownField<String>(
+                  value: mail.tags.any((t) => t.id.toString() == _actionValue)
                       ? _actionValue
                       : mail.tags.first.id.toString(),
                   decoration: const InputDecoration(labelText: '选择标签', isDense: true),
@@ -406,8 +406,8 @@ class _RuleEditorDialogState extends ConsumerState<_RuleEditorDialog> {
               ],
               if (_actionType == 'move_folder') ...[
                 const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: (_actionValue == 'trash' || _actionValue == 'spam') ? _actionValue : 'archive',
+                AppDropdownField<String>(
+                  value: (_actionValue == 'trash' || _actionValue == 'spam') ? _actionValue : 'archive',
                   decoration: const InputDecoration(labelText: '目标文件夹', isDense: true),
                   items: const [
                     DropdownMenuItem(value: 'archive', child: Text('归档')),

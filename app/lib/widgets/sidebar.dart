@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -52,7 +54,12 @@ class _SidebarState extends ConsumerState<Sidebar> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 10, 12),
+              padding: EdgeInsets.fromLTRB(
+                16,
+                (Platform.isWindows && !widget.inDrawer) ? 6 : 14,
+                10,
+                12,
+              ),
               child: Row(
                 children: [
                   const MailControlLogo(size: 30),

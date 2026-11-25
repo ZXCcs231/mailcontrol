@@ -207,7 +207,7 @@ class _MessageListState extends ConsumerState<MessageList> {
                 ),
               ),
             ),
-          Divider(color: p.borderSubtle),
+          const SizedBox(height: 4),
           Expanded(
             child: mail.loadingList && mail.messages.isEmpty
                 ? const Center(child: CircularProgressIndicator())

@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../models/models.dart';
 import '../providers/mail_provider.dart';
+import '../widgets/brand_widgets.dart';
 
 class ComposeScreen extends ConsumerStatefulWidget {
   final MailMessage? refMessage;
@@ -309,8 +310,8 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          DropdownButtonFormField<int>(
-            initialValue: _accountId,
+          AppDropdownField<int>(
+            value: _accountId,
             decoration: const InputDecoration(labelText: '发件邮箱', isDense: true),
             items: [
               for (final a in accounts)

@@ -95,7 +95,6 @@ class TagsScreen extends ConsumerWidget {
             ],
           ),
         ),
-        const Divider(),
         Expanded(
           child: mail.tags.isEmpty
               ? const Center(child: Text('暂无标签，点击右上角创建'))

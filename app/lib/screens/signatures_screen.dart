@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../models/models.dart';
 import '../providers/mail_provider.dart';
+import '../widgets/brand_widgets.dart';
 
 class SignaturesScreen extends ConsumerWidget {
   final bool isDialog;
@@ -33,8 +34,8 @@ class SignaturesScreen extends ConsumerWidget {
                     decoration: const InputDecoration(labelText: '签名名称', hintText: '如：商务签名'),
                   ),
                   const SizedBox(height: 10),
-                  DropdownButtonFormField<int?>(
-                    initialValue: accountId,
+                  AppDropdownField<int?>(
+                    value: accountId,
                     decoration: const InputDecoration(labelText: '绑定邮箱', isDense: true),
                     items: [
                       const DropdownMenuItem(value: null, child: Text('通用签名（所有邮箱）')),
@@ -112,7 +113,6 @@ class SignaturesScreen extends ConsumerWidget {
             ],
           ),
         ),
-        const Divider(),
         Expanded(
           child: mail.signatures.isEmpty
               ? const Center(child: Text('暂无签名模板，点击右上角新建'))

@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import '../core/theme.dart';
 import '../models/models.dart';
 import '../providers/mail_provider.dart';
+import '../widgets/brand_widgets.dart';
 
 class AccountModal extends ConsumerStatefulWidget {
   final MailAccount? existing;
@@ -255,7 +256,6 @@ class _AccountModalState extends ConsumerState<AccountModal> {
             ],
           ),
         ),
-        const Divider(),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(18),
@@ -396,8 +396,8 @@ class _AccountModalState extends ConsumerState<AccountModal> {
                       const SizedBox(width: 8),
                       Expanded(
                         flex: 2,
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _imapTls,
+                        child: AppDropdownField<String>(
+                          value: _imapTls,
                           decoration: const InputDecoration(labelText: '加密', isDense: true),
                           items: const [
                             DropdownMenuItem(value: 'ssl', child: Text('SSL/TLS')),
@@ -430,8 +430,8 @@ class _AccountModalState extends ConsumerState<AccountModal> {
                       const SizedBox(width: 8),
                       Expanded(
                         flex: 2,
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _smtpTls,
+                        child: AppDropdownField<String>(
+                          value: _smtpTls,
                           decoration: const InputDecoration(labelText: '加密', isDense: true),
                           items: const [
                             DropdownMenuItem(value: 'ssl', child: Text('SSL/TLS')),

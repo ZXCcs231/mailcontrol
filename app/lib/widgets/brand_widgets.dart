@@ -1,5 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../core/theme.dart';
+
 class MailControlLogo extends StatelessWidget {
   final double size;
 
@@ -193,6 +195,67 @@ class _HoverSurfaceState extends State<HoverSurface> {
         onTap: widget.onTap,
         onLongPress: widget.onLongPress,
         child: widget.builder(context, _hovering),
+      ),
+    );
+  }
+}
+
+/// 圆角美化的统一下拉选择表单框，避免默认直角弹出卡片显得生硬。
+class AppDropdownField<T> extends StatelessWidget {
+  final T? value;
+  final List<DropdownMenuItem<T>> items;
+  final ValueChanged<T?>? onChanged;
+  final InputDecoration decoration;
+  final String? Function(T?)? validator;
+
+  const AppDropdownField({
+    super.key,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+    this.decoration = const InputDecoration(isDense: true),
+    this.validator,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = context.palette;
+    return DropdownButtonFormField<T>(
+      initialValue: value,
+      items: items,
+      onChanged: onChanged,
+      validator: validator,
+      isExpanded: true,
+      menuMaxHeight: 320,
+      elevation: 6,
+      dropdownColor: pal.surfaceElevated,
+      borderRadius: BorderRadius.circular(14),
+      style: TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+        color: pal.textPrimary,
+      ),
+      icon: Icon(
+        Icons.keyboard_arrow_down_rounded,
+        size: 20,
+        color: pal.textSecondary,
+      ),
+      decoration: decoration.copyWith(
+        border: decoration.border ??
+            OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: pal.borderSubtle),
+            ),
+        enabledBorder: decoration.enabledBorder ??
+            OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: pal.borderSubtle),
+            ),
+        focusedBorder: decoration.focusedBorder ??
+            OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: pal.accent, width: 1.5),
+            ),
       ),
     );
   }
