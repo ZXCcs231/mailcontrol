@@ -18,7 +18,11 @@ final notificationServiceProvider = Provider<NotificationService>((ref) => Notif
   if (freshMessages.length == 1) {
     final m = freshMessages.first;
     final label = trimmedAcct.isNotEmpty ? trimmedAcct : m.accountLabel.trim();
-    final title = label.isNotEmpty ? '${m.senderDisplay}（$label）' : m.senderDisplay;
+    final tagPrefix = m.tags.isNotEmpty
+        ? '[${m.tags.map((t) => t.name).take(2).join(' / ')}] '
+        : '';
+    final baseTitle = label.isNotEmpty ? '${m.senderDisplay}（$label）' : m.senderDisplay;
+    final title = '$tagPrefix$baseTitle';
     final subj = m.subject.trim();
     final snip = m.snippet.trim();
     final body = subj.isNotEmpty ? subj : (snip.isNotEmpty ? snip : '收到一封新邮件');
@@ -31,8 +35,11 @@ final notificationServiceProvider = Provider<NotificationService>((ref) => Notif
     final title = label.isNotEmpty
         ? '$label 收到 ${freshMessages.length} 封新邮件'
         : '收到 ${freshMessages.length} 封新邮件';
+    final tagPrefix = first.tags.isNotEmpty ? '[${first.tags.first.name}] ' : '';
     final subj = first.subject.trim().isNotEmpty ? first.subject.trim() : first.snippet.trim();
-    final body = subj.isNotEmpty ? '最新：${first.senderDisplay} - $subj' : '最新来自：${first.senderDisplay}';
+    final body = subj.isNotEmpty
+        ? '最新：$tagPrefix${first.senderDisplay} - $subj'
+        : '最新来自：$tagPrefix${first.senderDisplay}';
     return (title: title, body: body, payload: 'msg:${first.id}');
   }
 

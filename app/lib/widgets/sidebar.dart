@@ -206,23 +206,49 @@ class _SidebarState extends ConsumerState<Sidebar> {
                   const SizedBox(height: 14),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(8, 2, 2, 6),
-                    child: Row(
-                      children: [
-                        Text(
-                          '标签分类',
-                          style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: p.textMuted),
-                        ),
-                        const Spacer(),
-                        IconButton(
-                          tooltip: '管理标签',
-                          onPressed: () {
-                            _closeIfDrawer();
-                            widget.onOpenTags();
-                          },
-                          icon: Icon(Icons.tune_rounded, size: 17, color: p.textSecondary),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ],
+                    child: Builder(
+                      builder: (context) {
+                        final totalTagUnread = mail.tags.fold<int>(
+                          0,
+                          (sum, t) => sum + (mail.stats.tagUnread[t.id] ?? 0),
+                        );
+                        return Row(
+                          children: [
+                            Text(
+                              '标签分类',
+                              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: p.textMuted),
+                            ),
+                            if (totalTagUnread > 0) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: p.accent,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '$totalTagUnread',
+                                  style: const TextStyle(
+                                    fontSize: 10.5,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            const Spacer(),
+                            IconButton(
+                              tooltip: '管理标签',
+                              onPressed: () {
+                                _closeIfDrawer();
+                                widget.onOpenTags();
+                              },
+                              icon: Icon(Icons.tune_rounded, size: 17, color: p.textSecondary),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ),
                   for (final tag in mail.tags)
@@ -230,6 +256,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
                       icon: Icons.label_rounded,
                       iconColor: parseHexColor(tag.color),
                       label: tag.name,
+                      badge: mail.stats.tagUnread[tag.id] ?? 0,
+                      badgeColor: parseHexColor(tag.color),
                       selected: mail.activeView == 'tag' && mail.activeTagId == tag.id,
                       onTap: () {
                         _closeIfDrawer();
@@ -521,6 +549,7 @@ class _NavItem extends StatelessWidget {
   final Color? iconColor;
   final String label;
   final int badge;
+  final Color? badgeColor;
   final bool selected;
   final bool dense;
   final VoidCallback onTap;
@@ -530,6 +559,7 @@ class _NavItem extends StatelessWidget {
     this.iconColor,
     required this.label,
     this.badge = 0,
+    this.badgeColor,
     required this.selected,
     this.dense = false,
     required this.onTap,
@@ -538,6 +568,8 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
+    final hasBadge = badge > 0;
+    final activeBadgeBg = badgeColor ?? p.accent;
     return HoverSurface(
       onTap: onTap,
       builder: (context, hovering) => Container(
@@ -560,17 +592,17 @@ class _NavItem extends StatelessWidget {
                 label,
                 style: TextStyle(
                   fontSize: dense ? 12.8 : 13.5,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  fontWeight: (selected || hasBadge) ? FontWeight.w600 : FontWeight.w500,
                   color: selected ? p.accent : p.textPrimary,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            if (badge > 0)
+            if (hasBadge)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
-                  color: selected ? p.accent : p.hoverBg,
+                  color: selected ? p.accent : (badgeColor != null ? activeBadgeBg : p.hoverBg),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
@@ -578,7 +610,7 @@ class _NavItem extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: selected ? Colors.white : p.textSecondary,
+                    color: (selected || badgeColor != null) ? Colors.white : p.textSecondary,
                   ),
                 ),
               ),

@@ -316,13 +316,30 @@ class MailStats {
   final int starredCount;
   final int draftsCount;
   final Map<int, int> accountUnread;
+  final Map<int, int> tagUnread;
+  final bool hasTagCounts;
 
   const MailStats({
     this.inboxUnread = 0,
     this.starredCount = 0,
     this.draftsCount = 0,
     this.accountUnread = const {},
+    this.tagUnread = const {},
+    this.hasTagCounts = false,
   });
+
+  MailStats copyWith({
+    Map<int, int>? tagUnread,
+    bool? hasTagCounts,
+  }) =>
+      MailStats(
+        inboxUnread: inboxUnread,
+        starredCount: starredCount,
+        draftsCount: draftsCount,
+        accountUnread: accountUnread,
+        tagUnread: tagUnread ?? this.tagUnread,
+        hasTagCounts: hasTagCounts ?? this.hasTagCounts,
+      );
 
   factory MailStats.fromJson(Map<String, dynamic> j) {
     final map = <int, int>{};
@@ -330,11 +347,21 @@ class MailStats {
       final m = Map<String, dynamic>.from(item);
       map[_asInt(m['account_id'])] = _asInt(m['unread_count']);
     }
+    final hasTagCounts = j.containsKey('tag_counts') && j['tag_counts'] is List;
+    final tagMap = <int, int>{};
+    if (hasTagCounts) {
+      for (final item in j['tag_counts'] as List) {
+        final m = Map<String, dynamic>.from(item);
+        tagMap[_asInt(m['tag_id'])] = _asInt(m['unread_count']);
+      }
+    }
     return MailStats(
       inboxUnread: _asInt(j['inbox_unread']),
       starredCount: _asInt(j['starred_count']),
       draftsCount: _asInt(j['drafts_count']),
       accountUnread: map,
+      tagUnread: tagMap,
+      hasTagCounts: hasTagCounts,
     );
   }
 }

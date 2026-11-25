@@ -207,6 +207,18 @@ func TestEndToEndFlow(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("stats status=%d", w.Code)
 	}
+	var statsResp struct {
+		TagCounts []struct {
+			TagID       int64 `json:"tag_id"`
+			UnreadCount int   `json:"unread_count"`
+		} `json:"tag_counts"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &statsResp); err != nil {
+		t.Fatalf("decode stats: %v", err)
+	}
+	if statsResp.TagCounts == nil {
+		t.Fatalf("expected non-nil tag_counts in /api/stats response: %s", w.Body.String())
+	}
 
 	w = doReq(t, h, "GET", "/api/server-info", authResp.Token, nil)
 	if w.Code != http.StatusOK {

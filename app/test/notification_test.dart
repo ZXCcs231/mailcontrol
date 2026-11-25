@@ -202,6 +202,66 @@ void main() {
     expect(fallback.title, 'MailControl · 新邮件提醒');
     expect(fallback.body, 'QQ 邮箱 收到 3 封新邮件');
     expect(fallback.payload, isNull);
+
+    final taggedMsg = MailMessage(
+      id: 31,
+      accountId: 1,
+      accountLabel: 'QQ 邮箱',
+      accountEmail: 'user@qq.com',
+      accountColor: '#2563eb',
+      folderId: 1,
+      folderRole: 'inbox',
+      folderName: '收件箱',
+      messageIdHeader: '<31@example.com>',
+      inReplyTo: '',
+      subject: '您的验证码是 123456',
+      fromName: 'GitHub',
+      fromAddr: 'noreply@github.com',
+      toAddrs: 'user@qq.com',
+      ccAddrs: '',
+      bccAddrs: '',
+      snippet: '',
+      bodyText: '',
+      bodyHtml: '',
+      isRead: false,
+      isStarred: false,
+      isDraft: false,
+      hasAttachments: false,
+      sentAt: DateTime(2026, 11, 26),
+      receivedAt: DateTime(2026, 11, 26),
+      tags: [MailTag(id: 5, name: '验证码', color: '#0891b2')],
+      attachments: const [],
+    );
+    final taggedNotif = buildNewMailNotificationContent(
+      accountLabel: 'QQ 邮箱',
+      freshMessages: [taggedMsg],
+    );
+    expect(taggedNotif.title, '[验证码] GitHub（QQ 邮箱）');
+  });
+
+  test('MailStats.fromJson parses tag_counts and sets hasTagCounts', () {
+    final withTags = MailStats.fromJson({
+      'inbox_unread': 5,
+      'starred_count': 2,
+      'drafts_count': 1,
+      'account_counts': [
+        {'account_id': 1, 'unread_count': 5},
+      ],
+      'tag_counts': [
+        {'tag_id': 10, 'unread_count': 3},
+        {'tag_id': 11, 'unread_count': 0},
+      ],
+    });
+    expect(withTags.hasTagCounts, isTrue);
+    expect(withTags.tagUnread[10], 3);
+    expect(withTags.tagUnread[11], 0);
+
+    final legacy = MailStats.fromJson({
+      'inbox_unread': 5,
+      'account_counts': [],
+    });
+    expect(legacy.hasTagCounts, isFalse);
+    expect(legacy.tagUnread, isEmpty);
   });
 
   test('notifies once per new message when logged in and suppresses after logout', () async {

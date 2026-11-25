@@ -144,17 +144,24 @@ type Signature struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
-// Stats 汇总统一视图和各账号未读数。
+// Stats 汇总统一视图、各账号及各标签未读数。
 type Stats struct {
 	InboxUnread   int           `json:"inbox_unread"`
 	StarredCount  int           `json:"starred_count"`
 	DraftsCount   int           `json:"drafts_count"`
 	AccountCounts []AccountStat `json:"account_counts"`
+	TagCounts     []TagStat     `json:"tag_counts"`
 }
 
 // AccountStat 表示单个邮箱账号的未读数统计。
 type AccountStat struct {
 	AccountID   int64 `json:"account_id"`
+	UnreadCount int   `json:"unread_count"`
+}
+
+// TagStat 表示单个标签分类的未读邮件数统计。
+type TagStat struct {
+	TagID       int64 `json:"tag_id"`
 	UnreadCount int   `json:"unread_count"`
 }
 

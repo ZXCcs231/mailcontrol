@@ -537,11 +537,31 @@ class MailNotifier extends Notifier<MailState> {
         _api.getRules(),
         _api.getSignatures(),
       ]);
+      var stats = results[2] as MailStats;
+      final tags = results[3] as List<MailTag>;
+      if (!stats.hasTagCounts && tags.isNotEmpty) {
+        final fallbackCounts = <int, int>{};
+        await Future.wait(
+          tags.map((t) async {
+            try {
+              final r = await _api.getMessages(
+                view: 'tag',
+                tagId: t.id,
+                unreadOnly: true,
+                page: 1,
+                pageSize: 1,
+              );
+              fallbackCounts[t.id] = r.total;
+            } catch (_) {}
+          }),
+        );
+        stats = stats.copyWith(tagUnread: fallbackCounts);
+      }
       state = state.copyWith(
         accounts: results[0] as List<MailAccount>,
         folders: results[1] as List<MailFolder>,
-        stats: results[2] as MailStats,
-        tags: results[3] as List<MailTag>,
+        stats: stats,
+        tags: tags,
         rules: results[4] as List<MailRule>,
         signatures: results[5] as List<MailSignature>,
       );
@@ -704,7 +724,7 @@ class MailNotifier extends Notifier<MailState> {
     } else {
       await _api.patchMessage(msgId, addTagId: tagId);
     }
-    await loadMessages(silent: true);
+    await Future.wait([loadMessages(silent: true), refreshMetadata()]);
     if (state.selectedMessage?.id == msgId) {
       final detail = await _api.getMessage(msgId);
       state = state.copyWith(selectedMessage: detail);

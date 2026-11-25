@@ -365,6 +365,7 @@ func (s *Server) GetStats(c *gin.Context) {
 		JOIN folders f ON f.id = m.folder_id
 		WHERE m.user_id = ? AND (m.is_draft = 1 OR f.role = 'drafts')`, uid).Scan(&stats.DraftsCount)
 
+	stats.AccountCounts = make([]models.AccountStat, 0)
 	rows, err := s.DB.Query(`
 		SELECT a.id, COALESCE((SELECT COUNT(*) FROM messages m JOIN folders f ON f.id = m.folder_id WHERE m.account_id = a.id AND f.role = 'inbox' AND m.is_read = 0), 0)
 		FROM mail_accounts a WHERE a.user_id = ?`, uid)
@@ -377,6 +378,27 @@ func (s *Server) GetStats(c *gin.Context) {
 			}
 		}
 	}
+
+	stats.TagCounts = make([]models.TagStat, 0)
+	tagRows, err := s.DB.Query(`
+		SELECT t.id, COALESCE((
+			SELECT COUNT(*)
+			FROM message_tags mt
+			JOIN messages m ON m.id = mt.message_id
+			JOIN folders f ON f.id = m.folder_id
+			WHERE mt.tag_id = t.id AND m.user_id = ? AND m.is_read = 0 AND f.role NOT IN ('trash', 'spam')
+		), 0)
+		FROM tags t WHERE t.user_id = ?`, uid, uid)
+	if err == nil {
+		defer func() { _ = tagRows.Close() }()
+		for tagRows.Next() {
+			var ts models.TagStat
+			if err := tagRows.Scan(&ts.TagID, &ts.UnreadCount); err == nil {
+				stats.TagCounts = append(stats.TagCounts, ts)
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, stats)
 }
 
