@@ -217,4 +217,26 @@ func TestEndToEndFlow(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("translate languages status=%d", w.Code)
 	}
+
+	// Admin endpoints & registration toggle
+	w = doReq(t, h, "GET", "/admin", "", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("admin page status=%d", w.Code)
+	}
+	w = doReq(t, h, "GET", "/api/admin/overview", authResp.Token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("admin overview status=%d body=%s", w.Code, w.Body.String())
+	}
+	w = doReq(t, h, "PUT", "/api/admin/settings", authResp.Token, map[string]bool{"allow_register": false})
+	if w.Code != http.StatusOK {
+		t.Fatalf("admin settings status=%d", w.Code)
+	}
+	w = doReq(t, h, "POST", "/api/auth/register", "", map[string]string{
+		"username": "blocked_user",
+		"email":    "blocked@qq.com",
+		"password": "password123",
+	})
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 when registration closed, got %d", w.Code)
+	}
 }

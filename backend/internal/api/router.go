@@ -24,6 +24,8 @@ func NewRouter(conn *sql.DB, cfg *config.Config, hub *syncer.Hub, scheduler *syn
 		Translator: translator.New(),
 	}
 
+	r.GET("/admin", srv.AdminPage)
+
 	apiGroup := r.Group("/api")
 	{
 		apiGroup.GET("/health", srv.Health)
@@ -81,6 +83,22 @@ func NewRouter(conn *sql.DB, cfg *config.Config, hub *syncer.Hub, scheduler *syn
 			auth.POST("/messages/:id/translate", srv.TranslateMessage)
 
 			auth.GET("/events", srv.Events)
+
+			admin := auth.Group("/admin")
+			admin.Use(srv.AdminMiddleware())
+			{
+				admin.GET("/overview", srv.AdminOverview)
+				admin.GET("/users", srv.AdminListUsers)
+				admin.PATCH("/users/:id", srv.AdminUpdateUser)
+				admin.DELETE("/users/:id", srv.AdminDeleteUser)
+				admin.GET("/accounts", srv.AdminListAccounts)
+				admin.POST("/accounts/:id/sync", srv.AdminTriggerSync)
+				admin.GET("/settings", srv.AdminGetSettings)
+				admin.PUT("/settings", srv.AdminUpdateSettings)
+				admin.POST("/translate/test", srv.AdminTestTranslate)
+				admin.GET("/backup", srv.AdminDownloadBackup)
+				admin.POST("/maintenance/cleanup", srv.AdminCleanupAttachments)
+			}
 		}
 	}
 

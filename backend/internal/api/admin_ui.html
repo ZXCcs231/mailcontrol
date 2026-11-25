@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MailControl 服务端后台管理</title>
+  <style>
+    :root {
+      --bg: #f4f6fa;
+      --card: #ffffff;
+      --border: #e5eaf1;
+      --text: #0f172a;
+      --sub: #475569;
+      --muted: #64748b;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --soft: #eff6ff;
+      --danger: #dc2626;
+      --ok: #059669;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Microsoft YaHei UI", "Segoe UI", "PingFang SC", -apple-system, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .topbar {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; }
+    .logo {
+      width: 32px; height: 32px; border-radius: 9px;
+      background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+      color: #fff; display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 15px;
+    }
+    .container { max-width: 1120px; margin: 24px auto; padding: 0 20px; }
+    .login-wrap { max-width: 400px; margin: 72px auto; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+    .tab {
+      padding: 8px 16px; border-radius: 10px; border: 1px solid var(--border);
+      background: var(--card); color: var(--sub); cursor: pointer; font-weight: 600;
+    }
+    .tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 16px; }
+    .stat-label { color: var(--muted); font-size: 12.5px; }
+    .stat-val { font-size: 24px; font-weight: 700; margin-top: 4px; }
+    .btn {
+      border: 1px solid var(--border); background: var(--card); color: var(--text);
+      padding: 7px 14px; border-radius: 9px; cursor: pointer; font-size: 13px; font-weight: 600;
+    }
+    .btn:hover { background: #f1f5f9; }
+    .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-danger { color: var(--danger); border-color: #fecaca; }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+    input[type=text], input[type=password], select {
+      width: 100%; padding: 9px 12px; border: 1px solid var(--border);
+      border-radius: 9px; font-size: 13.5px; background: #f8fafc; color: var(--text);
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; font-size: 12px; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; }
+    .pill-ok { background: #ecfdf5; color: var(--ok); }
+    .pill-err { background: #fef2f2; color: var(--danger); }
+    .pill-blue { background: var(--soft); color: var(--primary); }
+    .pill-gray { background: #f1f5f9; color: var(--sub); }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .muted { color: var(--muted); font-size: 12.5px; }
+    .err-box { background: #fef2f2; color: var(--danger); padding: 10px 12px; border-radius: 9px; margin-top: 10px; font-size: 13px; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo">M</div>
+      <span>MailControl 服务端后台管理</span>
+    </div>
+    <div id="top-actions" class="row hidden">
+      <span id="admin-name" class="muted"></span>
+      <button class="btn btn-sm" onclick="logout()">退出登录</button>
+    </div>
+  </div>
+
+  <div id="login-view" class="login-wrap">
+    <div class="card">
+      <h2 style="margin:0 0 6px 0;">管理员登录</h2>
+      <p class="muted" style="margin:0 0 18px 0;">请使用具有管理员权限的 MailControl 账号登录（系统首个注册账号默认为管理员）</p>
+      <div style="margin-bottom:12px;">
+        <label class="muted">用户名或邮箱</label>
+        <input id="l-account" type="text" placeholder="请输入管理员用户名" />
+      </div>
+      <div style="margin-bottom:14px;">
+        <label class="muted">密码</label>
+        <input id="l-pass" type="password" placeholder="请输入密码" onkeydown="if(event.key==='Enter')login()" />
+      </div>
+      <button class="btn btn-primary" style="width:100%;padding:10px;" onclick="login()">登录后台</button>
+      <div id="l-err" class="err-box hidden"></div>
+    </div>
+  </div>
+
+  <div id="app-view" class="container hidden">
+    <div class="tabs">
+      <button class="tab active" data-tab="overview" onclick="switchTab('overview', this)">系统概览</button>
+      <button class="tab" data-tab="users" onclick="switchTab('users', this)">用户与注册管理</button>
+      <button class="tab" data-tab="accounts" onclick="switchTab('accounts', this)">邮箱同步监控</button>
+      <button class="tab" data-tab="maintenance" onclick="switchTab('maintenance', this)">备份与维护</button>
+    </div>
+
+    <div id="tab-overview">
+      <div class="grid" id="overview-cards"></div>
+      <div class="card row">
+        <div>
+          <div style="font-weight:700;">公网开放注册开关</div>
+          <div class="muted">私有自托管确认家庭/团队账号建好后，可关闭开放注册防止陌生人注册占用服务器资源。</div>
+        </div>
+        <div class="row">
+          <span id="reg-status-pill" class="pill"></span>
+          <button id="reg-toggle-btn" class="btn btn-primary" onclick="toggleRegister()"></button>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-users" class="hidden">
+      <div class="card">
+        <div class="row" style="margin-bottom:12px;">
+          <h3 style="margin:0;">系统用户列表</h3>
+          <button class="btn btn-sm" onclick="loadUsers()">刷新</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr><th>ID</th><th>用户名</th><th>标识邮箱</th><th>角色 / 状态</th><th>邮箱数</th><th>邮件数</th><th>操作</th></tr>
+            </thead>
+            <tbody id="users-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-accounts" class="hidden">
+      <div class="card">
+        <div class="row" style="margin-bottom:12px;">
+          <h3 style="margin:0;">全站已绑定邮箱同步状态</h3>
+          <button class="btn btn-sm" onclick="loadAccounts()">刷新</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr><th>ID</th><th>所属用户</th><th>名称 / 邮箱</th><th>服务商</th><th>同步状态</th><th>邮件数</th><th>最近同步 / 错误详情</th><th>操作</th></tr>
+            </thead>
+            <tbody id="accounts-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-maintenance" class="hidden">
+      <div class="card row">
+        <div>
+          <h3 style="margin:0 0 4px 0;">数据打包备份下载</h3>
+          <div class="muted">执行 SQLite WAL 落盘检查点后，打包下载 mailcontrol.db 与 secrets.json 压缩包。</div>
+        </div>
+        <button class="btn btn-primary" onclick="downloadBackup()">下载完整备份 (.zip)</button>
+      </div>
+      <div class="card row">
+        <div>
+          <h3 style="margin:0 0 4px 0;">清理孤立附件缓存</h3>
+          <div class="muted">扫描本地附件目录中已无数据库引用的残留文件并释放磁盘空间。</div>
+        </div>
+        <button class="btn" onclick="cleanupAttachments()">立即清理</button>
+      </div>
+      <div class="card">
+        <h3 style="margin:0 0 8px 0;">免费翻译渠道连通性测试</h3>
+        <div class="row">
+          <input id="tr-text" type="text" style="flex:1;min-width:220px;" value="Hello, MailControl server is running smoothly." />
+          <select id="tr-lang" style="width:140px;">
+            <option value="zh-CN">简体中文</option>
+            <option value="en">英语</option>
+            <option value="ja">日语</option>
+          </select>
+          <button class="btn btn-primary" onclick="testTranslate()">测试翻译</button>
+        </div>
+        <div id="tr-result" class="muted" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const TOKEN_KEY = 'mailcontrol_admin_token';
+let token = localStorage.getItem(TOKEN_KEY) || '';
+let allowRegister = true;
+
+async function api(path, opts = {}) {
+  const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  const res = await fetch(path, Object.assign({}, opts, { headers }));
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ('请求失败 ' + res.status));
+  return data;
+}
+
+function fmtBytes(b) {
+  if (!b) return '0 B';
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+  return (b / 1048576).toFixed(2) + ' MB';
+}
+
+function fmtTime(s) {
+  if (!s) return '—';
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? s : d.toLocaleString('zh-CN');
+}
+
+async function login() {
+  const errBox = document.getElementById('l-err');
+  errBox.classList.add('hidden');
+  try {
+    const data = await api('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({
+        account: document.getElementById('l-account').value.trim(),
+        password: document.getElementById('l-pass').value
+      })
+    });
+    if (!data.user || !data.user.is_admin) {
+      throw new Error('该账号没有管理员权限');
+    }
+    token = data.token;
+    localStorage.setItem(TOKEN_KEY, token);
+    enterApp(data.user);
+  } catch (e) {
+    errBox.textContent = e.message;
+    errBox.classList.remove('hidden');
+  }
+}
+
+function logout() {
+  token = '';
+  localStorage.removeItem(TOKEN_KEY);
+  document.getElementById('app-view').classList.add('hidden');
+  document.getElementById('top-actions').classList.add('hidden');
+  document.getElementById('login-view').classList.remove('hidden');
+}
+
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  ['overview', 'users', 'accounts', 'maintenance'].forEach(t => {
+    document.getElementById('tab-' + t).classList.toggle('hidden', t !== name);
+  });
+  if (name === 'overview') loadOverview();
+  if (name === 'users') loadUsers();
+  if (name === 'accounts') loadAccounts();
+}
+
+async function enterApp(user) {
+  document.getElementById('login-view').classList.add('hidden');
+  document.getElementById('app-view').classList.remove('hidden');
+  document.getElementById('top-actions').classList.remove('hidden');
+  document.getElementById('admin-name').textContent = '管理员：' + user.username;
+  loadOverview();
+}
+
+async function loadOverview() {
+  const d = await api('/api/admin/overview');
+  allowRegister = !!d.allow_register;
+  const cards = [
+    ['系统用户数', d.users_count],
+    ['绑定邮箱总数', d.accounts_count + (d.error_accounts ? ` (${d.error_accounts} 异常)` : '')],
+    ['本地缓存邮件', d.messages_count],
+    ['数据库 / 附件体积', fmtBytes(d.db_size_bytes) + ' / ' + fmtBytes(d.att_size_bytes)],
+    ['内存 / 协程数', d.mem_alloc_mb + ' MB / ' + d.goroutines],
+    ['运行时长', Math.floor(d.uptime_sec / 60) + ' 分钟']
+  ];
+  document.getElementById('overview-cards').innerHTML = cards.map(([k, v]) =>
+    `<div class="card"><div class="stat-label">${k}</div><div class="stat-val">${v}</div></div>`
+  ).join('');
+  const pill = document.getElementById('reg-status-pill');
+  const btn = document.getElementById('reg-toggle-btn');
+  pill.textContent = allowRegister ? '当前：允许新用户注册' : '当前：已关闭注册';
+  pill.className = 'pill ' + (allowRegister ? 'pill-ok' : 'pill-err');
+  btn.textContent = allowRegister ? '关闭开放注册' : '开启开放注册';
+}
+
+async function toggleRegister() {
+  await api('/api/admin/settings', {
+    method: 'PUT',
+    body: JSON.stringify({ allow_register: !allowRegister })
+  });
+  await loadOverview();
+}
+
+async function loadUsers() {
+  const d = await api('/api/admin/users');
+  document.getElementById('users-tbody').innerHTML = d.items.map(u => `
+    <tr>
+      <td>${u.id}</td>
+      <td><b>${u.username}</b></td>
+      <td>${u.email}</td>
+      <td>
+        ${u.is_admin ? '<span class="pill pill-blue">管理员</span>' : '<span class="pill pill-gray">普通用户</span>'}
+        ${u.is_disabled ? '<span class="pill pill-err">已禁用</span>' : '<span class="pill pill-ok">正常</span>'}
+      </td>
+      <td>${u.accounts_count}</td>
+      <td>${u.messages_count}</td>
+      <td>
+        <button class="btn btn-sm" onclick="toggleUserDisable(${u.id}, ${!u.is_disabled})">${u.is_disabled ? '启用' : '禁用'}</button>
+        <button class="btn btn-sm" onclick="resetUserPwd(${u.id}, '${u.username}')">改密</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id}, '${u.username}')">删除</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function toggleUserDisable(id, next) {
+  try {
+    await api('/api/admin/users/' + id, { method: 'PATCH', body: JSON.stringify({ is_disabled: next }) });
+    loadUsers();
+  } catch (e) { alert(e.message); }
+}
+
+async function resetUserPwd(id, name) {
+  const pwd = prompt('请输入用户「' + name + '」的新密码（至少 6 位）：');
+  if (!pwd) return;
+  try {
+    await api('/api/admin/users/' + id, { method: 'PATCH', body: JSON.stringify({ new_password: pwd }) });
+    alert('密码已更新');
+  } catch (e) { alert(e.message); }
+}
+
+async function deleteUser(id, name) {
+  if (!confirm('确定删除用户「' + name + '」及其全部邮箱数据吗？')) return;
+  try {
+    await api('/api/admin/users/' + id, { method: 'DELETE' });
+    loadUsers();
+  } catch (e) { alert(e.message); }
+}
+
+async function loadAccounts() {
+  const d = await api('/api/admin/accounts');
+  document.getElementById('accounts-tbody').innerHTML = d.items.map(a => `
+    <tr>
+      <td>${a.id}</td>
+      <td>${a.username}</td>
+      <td><b>${a.label}</b><br/><span class="muted">${a.email_address}</span></td>
+      <td>${a.provider_id}</td>
+      <td><span class="pill ${a.last_sync_status==='error' ? 'pill-err' : (a.last_sync_status==='ok' ? 'pill-ok' : 'pill-blue')}">${a.last_sync_status}</span></td>
+      <td>${a.messages_count}</td>
+      <td>${fmtTime(a.last_sync_at)}${a.last_sync_error ? '<br/><span style="color:#dc2626;font-size:12px;">' + a.last_sync_error + '</span>' : ''}</td>
+      <td><button class="btn btn-sm" onclick="syncAccount(${a.id})">立即同步</button></td>
+    </tr>
+  `).join('');
+}
+
+async function syncAccount(id) {
+  await api('/api/admin/accounts/' + id + '/sync', { method: 'POST' });
+  alert('已触发后台同步');
+  loadAccounts();
+}
+
+function downloadBackup() {
+  window.open('/api/admin/backup?token=' + encodeURIComponent(token), '_blank');
+}
+
+async function cleanupAttachments() {
+  const d = await api('/api/admin/maintenance/cleanup', { method: 'POST' });
+  alert('清理完成：删除 ' + d.removed_files + ' 个孤立文件，释放 ' + fmtBytes(d.freed_bytes));
+  loadOverview();
+}
+
+async function testTranslate() {
+  const outEl = document.getElementById('tr-result');
+  outEl.textContent = '正在测试...';
+  try {
+    const d = await api('/api/admin/translate/test', {
+      method: 'POST',
+      body: JSON.stringify({
+        text: document.getElementById('tr-text').value,
+        target_lang: document.getElementById('tr-lang').value
+      })
+    });
+    outEl.innerHTML = '<span class="pill pill-ok">' + d.provider + ' · ' + d.elapsed_ms + 'ms</span> ' + d.translated_text;
+  } catch (e) {
+    outEl.innerHTML = '<span class="pill pill-err">失败</span> ' + e.message;
+  }
+}
+
+(async function init() {
+  if (!token) return;
+  try {
+    const me = await api('/api/auth/me');
+    if (me.is_admin) enterApp(me);
+    else logout();
+  } catch (_) { logout(); }
+})();
+</script>
+</body>
+</html>

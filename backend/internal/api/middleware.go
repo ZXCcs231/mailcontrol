@@ -56,8 +56,32 @@ func (s *Server) AuthMiddleware() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "认证令牌无效或已过期"})
 			return
 		}
+		var isAdminInt, isDisabledInt int
+		err = s.DB.QueryRow(`SELECT is_admin, is_disabled FROM users WHERE id = ?`, claims.UserID).
+			Scan(&isAdminInt, &isDisabledInt)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "账号不存在或令牌已失效"})
+			return
+		}
+		if isDisabledInt == 1 {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "该账号已被管理员禁用"})
+			return
+		}
 		c.Set("user_id", claims.UserID)
 		c.Set("username", claims.Username)
+		c.Set("is_admin", isAdminInt == 1)
+		c.Next()
+	}
+}
+
+// AdminMiddleware 限制仅管理员账号可访问。
+func (s *Server) AdminMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		v, _ := c.Get("is_admin")
+		if isAdmin, _ := v.(bool); !isAdmin {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "需要管理员权限"})
+			return
+		}
 		c.Next()
 	}
 }

@@ -178,6 +178,13 @@ CREATE TABLE IF NOT EXISTS message_translations (
 	FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS system_settings (
+	key TEXT PRIMARY KEY,
+	value TEXT NOT NULL
+);
+
+INSERT OR IGNORE INTO system_settings (key, value) VALUES ('allow_register', 'true');
+
 CREATE INDEX IF NOT EXISTS idx_accounts_user ON mail_accounts(user_id);
 CREATE INDEX IF NOT EXISTS idx_folders_account ON folders(account_id, role);
 CREATE INDEX IF NOT EXISTS idx_messages_user_recv ON messages(user_id, received_at DESC);
@@ -185,6 +192,17 @@ CREATE INDEX IF NOT EXISTS idx_messages_account_folder_uid ON messages(account_i
 CREATE INDEX IF NOT EXISTS idx_attachments_msg ON attachments(message_id);
 CREATE INDEX IF NOT EXISTS idx_rules_user ON rules(user_id, enabled, priority);
 `
-	_, err := conn.Exec(schema)
-	return err
+	if _, err := conn.Exec(schema); err != nil {
+		return err
+	}
+
+	// 平滑迁移已有数据库表列
+	_, _ = conn.Exec(`ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0`)
+	_, _ = conn.Exec(`ALTER TABLE users ADD COLUMN is_disabled INTEGER NOT NULL DEFAULT 0`)
+	_, _ = conn.Exec(`
+		UPDATE users SET is_admin = 1
+		WHERE id = (SELECT MIN(id) FROM users)
+		  AND NOT EXISTS (SELECT 1 FROM users WHERE is_admin = 1)`)
+
+	return nil
 }

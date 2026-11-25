@@ -34,6 +34,14 @@ func (s *Server) Health(c *gin.Context) {
 }
 
 func (s *Server) Register(c *gin.Context) {
+	var allowReg string
+	if err := s.DB.QueryRow(`SELECT value FROM system_settings WHERE key = 'allow_register'`).Scan(&allowReg); err == nil {
+		if strings.EqualFold(allowReg, "false") || allowReg == "0" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "管理员已关闭新用户注册，请联系管理员开通账号"})
+			return
+		}
+	}
+
 	var req registerReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请填写完整的用户名、邮箱与密码"})
@@ -56,9 +64,16 @@ func (s *Server) Register(c *gin.Context) {
 		return
 	}
 
+	var userCount int
+	_ = s.DB.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&userCount)
+	isAdminInt := 0
+	if userCount == 0 {
+		isAdminInt = 1
+	}
+
 	res, err := s.DB.Exec(
-		`INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)`,
-		req.Username, req.Email, hash,
+		`INSERT INTO users (username, email, password_hash, is_admin) VALUES (?, ?, ?, ?)`,
+		req.Username, req.Email, hash, isAdminInt,
 	)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
@@ -72,8 +87,11 @@ func (s *Server) Register(c *gin.Context) {
 	_, _ = rules.InstallPresetsForUser(s.DB, uid, nil)
 
 	var user models.User
-	_ = s.DB.QueryRow(`SELECT id, username, email, created_at FROM users WHERE id = ?`, uid).
-		Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt)
+	var admInt, disInt int
+	_ = s.DB.QueryRow(`SELECT id, username, email, is_admin, is_disabled, created_at FROM users WHERE id = ?`, uid).
+		Scan(&user.ID, &user.Username, &user.Email, &admInt, &disInt, &user.CreatedAt)
+	user.IsAdmin = admInt == 1
+	user.IsDisabled = disInt == 1
 
 	token, err := crypto.GenerateToken(user.ID, user.Username, s.Cfg.JWTSecret)
 	if err != nil {
@@ -103,12 +121,13 @@ func (s *Server) Login(c *gin.Context) {
 	}
 
 	var user models.User
+	var admInt, disInt int
 	err := s.DB.QueryRow(`
-		SELECT id, username, email, password_hash, created_at
+		SELECT id, username, email, password_hash, is_admin, is_disabled, created_at
 		FROM users
 		WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)
 		LIMIT 1`, ident, ident,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.CreatedAt)
+	).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &admInt, &disInt, &user.CreatedAt)
 	if err == sql.ErrNoRows || !crypto.CheckPassword(user.PasswordHash, req.Password) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "账号或密码错误"})
 		return
@@ -117,6 +136,12 @@ func (s *Server) Login(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "登录查询失败"})
 		return
 	}
+	if disInt == 1 {
+		c.JSON(http.StatusForbidden, gin.H{"error": "该账号已被管理员禁用"})
+		return
+	}
+	user.IsAdmin = admInt == 1
+	user.IsDisabled = false
 
 	token, err := crypto.GenerateToken(user.ID, user.Username, s.Cfg.JWTSecret)
 	if err != nil {
@@ -133,12 +158,15 @@ func (s *Server) Login(c *gin.Context) {
 func (s *Server) Me(c *gin.Context) {
 	uid := currentUserID(c)
 	var user models.User
-	err := s.DB.QueryRow(`SELECT id, username, email, created_at FROM users WHERE id = ?`, uid).
-		Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt)
+	var admInt, disInt int
+	err := s.DB.QueryRow(`SELECT id, username, email, is_admin, is_disabled, created_at FROM users WHERE id = ?`, uid).
+		Scan(&user.ID, &user.Username, &user.Email, &admInt, &disInt, &user.CreatedAt)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
 		return
 	}
+	user.IsAdmin = admInt == 1
+	user.IsDisabled = disInt == 1
 	c.JSON(http.StatusOK, user)
 }
 
