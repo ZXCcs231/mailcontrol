@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
@@ -25,7 +27,6 @@ const _safeBlockStyleProps = <String>{
   'margin-left',
   'text-align',
   'color',
-  'font-family',
   'font-size',
   'font-weight',
   'line-height',
@@ -39,11 +40,54 @@ const _dropTableLayoutProps = <String>{
   'border-spacing',
 };
 
+const _monospaceTags = <String>{'pre', 'code', 'kbd', 'samp', 'tt'};
+const _borderShorthandProps = <String>{
+  'border',
+  'border-top',
+  'border-right',
+  'border-bottom',
+  'border-left',
+};
+
 final _pixelWidthPattern = RegExp(r'^(\d+(?:\.\d+)?)\s*(?:px)?$', caseSensitive: false);
 final _zeroWidthAndSpacePattern = RegExp(r'[\s\u00A0\u200B\u200C\u200D\uFEFF]+');
+final _colorTokenPattern = RegExp(
+  r'rgba?\([^)]+\)|#[0-9a-fA-F]{3,8}\b|\b[a-zA-Z]+\b',
+);
 
-/// 规范化邮件 HTML 正文，消除嵌套布局表格与固定 min-width 导致的极窄竖列排版问题。
-String normalizeEmailHtml(String rawHtml) {
+typedef _CssRgba = ({int r, int g, int b, double a, bool isTransparent});
+
+const _namedColors = <String, ({int r, int g, int b, double a, bool isTransparent})>{
+  'transparent': (r: 0, g: 0, b: 0, a: 0, isTransparent: true),
+  'black': (r: 0, g: 0, b: 0, a: 1, isTransparent: false),
+  'white': (r: 255, g: 255, b: 255, a: 1, isTransparent: false),
+  'gray': (r: 128, g: 128, b: 128, a: 1, isTransparent: false),
+  'grey': (r: 128, g: 128, b: 128, a: 1, isTransparent: false),
+  'whitesmoke': (r: 245, g: 245, b: 245, a: 1, isTransparent: false),
+  'lightgray': (r: 211, g: 211, b: 211, a: 1, isTransparent: false),
+  'lightgrey': (r: 211, g: 211, b: 211, a: 1, isTransparent: false),
+  'silver': (r: 192, g: 192, b: 192, a: 1, isTransparent: false),
+  'darkgray': (r: 169, g: 169, b: 169, a: 1, isTransparent: false),
+  'darkgrey': (r: 169, g: 169, b: 169, a: 1, isTransparent: false),
+  'dimgray': (r: 105, g: 105, b: 105, a: 1, isTransparent: false),
+  'dimgrey': (r: 105, g: 105, b: 105, a: 1, isTransparent: false),
+  'gainsboro': (r: 220, g: 220, b: 220, a: 1, isTransparent: false),
+  'snow': (r: 255, g: 250, b: 250, a: 1, isTransparent: false),
+  'ghostwhite': (r: 248, g: 248, b: 255, a: 1, isTransparent: false),
+  'aliceblue': (r: 240, g: 248, b: 255, a: 1, isTransparent: false),
+  'ivory': (r: 255, g: 255, b: 240, a: 1, isTransparent: false),
+  'linen': (r: 250, g: 240, b: 230, a: 1, isTransparent: false),
+  'beige': (r: 245, g: 245, b: 220, a: 1, isTransparent: false),
+  'navy': (r: 0, g: 0, b: 128, a: 1, isTransparent: false),
+  'blue': (r: 0, g: 0, b: 255, a: 1, isTransparent: false),
+  'red': (r: 255, g: 0, b: 0, a: 1, isTransparent: false),
+  'green': (r: 0, g: 128, b: 0, a: 1, isTransparent: false),
+  'yellow': (r: 255, g: 255, b: 0, a: 1, isTransparent: false),
+  'orange': (r: 255, g: 165, b: 0, a: 1, isTransparent: false),
+};
+
+/// 规范化邮件 HTML 正文：消除嵌套布局表格窄列挤压、剥离点阵中文字体回退，并按需适配深色模式色彩。
+String normalizeEmailHtml(String rawHtml, {bool darkMode = false}) {
   if (rawHtml.trim().isEmpty) return rawHtml;
 
   final doc = html_parser.parse(rawHtml);
@@ -126,6 +170,20 @@ String normalizeEmailHtml(String rawHtml) {
     _sanitizeResponsiveSizes(el, removeMinWidth: true);
   }
 
+  // 剥离非等宽代码元素上的内联 font-family 与 <font face>，防止 Windows 上回退到点阵 SimSun 产生毛刺
+  for (final el in body.querySelectorAll('*')) {
+    final tag = el.localName?.toLowerCase() ?? '';
+    if (_monospaceTags.contains(tag)) continue;
+
+    if (tag == 'font' && el.attributes.containsKey('face')) {
+      el.attributes.remove('face');
+    }
+    final styles = _parseStyleMap(el.attributes['style']);
+    if (styles.remove('font-family') != null) {
+      _writeStyleMap(el, styles);
+    }
+  }
+
   for (final img in body.querySelectorAll('img')) {
     final styles = _parseStyleMap(img.attributes['style']);
     styles['max-width'] = '100%';
@@ -133,7 +191,212 @@ String normalizeEmailHtml(String rawHtml) {
     _writeStyleMap(img, styles);
   }
 
+  if (darkMode) {
+    _adaptElementColorsForDarkMode(body, insideBrightColoredBg: false);
+  }
+
   return body.innerHtml;
+}
+
+void _adaptElementColorsForDarkMode(dom.Element el, {required bool insideBrightColoredBg}) {
+  final styles = _parseStyleMap(el.attributes['style']);
+  var changed = false;
+  var childInsideBrightBg = insideBrightColoredBg;
+
+  final bgRaw = styles['background-color'] ?? styles['background'] ?? el.attributes['bgcolor'];
+  final bgColor = bgRaw != null ? _parseCssColor(bgRaw) : null;
+  if (bgColor != null && !bgColor.isTransparent && bgColor.a > 0.05) {
+    final lum = _luminance(bgColor);
+    final chroma = _chroma(bgColor);
+    if (lum > 0.985 && chroma < 40) {
+      // 纯白/近白背景改为透明，融入深色卡片
+      if (styles.containsKey('background-color')) {
+        styles['background-color'] = 'transparent';
+        changed = true;
+      }
+      if (styles.containsKey('background') && _parseCssColor(styles['background']!) != null) {
+        styles.remove('background');
+        styles['background-color'] = 'transparent';
+        changed = true;
+      }
+      if (el.attributes.remove('bgcolor') != null) {
+        styles.putIfAbsent('background-color', () => 'transparent');
+        changed = true;
+      }
+      childInsideBrightBg = false;
+    } else if (lum > 0.72 && chroma < 40) {
+      // 浅灰底提示框（如 #f5f5f5 / #f8f9fa）转为柔和深色表面
+      styles.remove('background');
+      styles['background-color'] = '#222E42';
+      el.attributes.remove('bgcolor');
+      changed = true;
+      childInsideBrightBg = false;
+    } else if (lum > 0.72 && chroma >= 40) {
+      // 保持高饱和亮色底块原样，内部深色文字不再反白
+      childInsideBrightBg = true;
+    } else if (lum < 0.55) {
+      childInsideBrightBg = false;
+    }
+  }
+
+  if (!childInsideBrightBg) {
+    final inlineTextColor = styles['color'];
+    if (inlineTextColor != null) {
+      final adapted = _adaptTextColor(inlineTextColor);
+      if (adapted != null) {
+        styles['color'] = adapted;
+        changed = true;
+      }
+    }
+
+    final attrColor = el.attributes['color'];
+    if (attrColor != null) {
+      final adapted = _adaptTextColor(attrColor);
+      if (adapted != null) {
+        el.attributes['color'] = adapted;
+      }
+    }
+  }
+
+  final borderColorRaw = styles['border-color'];
+  if (borderColorRaw != null) {
+    final bc = _parseCssColor(borderColorRaw);
+    if (bc != null && !bc.isTransparent && _luminance(bc) > 0.70 && _chroma(bc) < 30) {
+      styles['border-color'] = '#334155';
+      changed = true;
+    }
+  }
+
+  for (final prop in _borderShorthandProps) {
+    final raw = styles[prop];
+    if (raw == null) continue;
+    final replaced = raw.replaceAllMapped(_colorTokenPattern, (match) {
+      final token = match.group(0)!;
+      final c = _parseCssColor(token);
+      if (c != null && !c.isTransparent && _luminance(c) > 0.70 && _chroma(c) < 30) {
+        return '#334155';
+      }
+      return token;
+    });
+    if (replaced != raw) {
+      styles[prop] = replaced;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    _writeStyleMap(el, styles);
+  }
+
+  for (final child in el.children) {
+    _adaptElementColorsForDarkMode(child, insideBrightColoredBg: childInsideBrightBg);
+  }
+}
+
+String? _adaptTextColor(String rawColor) {
+  final c = _parseCssColor(rawColor);
+  if (c == null || c.isTransparent) return null;
+
+  final lum = _luminance(c);
+  final chroma = _chroma(c);
+
+  if (c.b > c.r + 40 && lum < 0.55) {
+    return '#60A5FA';
+  }
+  if (lum < 0.45 && chroma < 50) {
+    if (c.a < 0.65 || lum >= 0.28) {
+      return '#94A3B8';
+    }
+    return '#F1F5F9';
+  }
+  return null;
+}
+
+_CssRgba? _parseCssColor(String raw) {
+  final s = raw.trim().toLowerCase();
+  if (s.isEmpty) return null;
+
+  final named = _namedColors[s];
+  if (named != null) return named;
+
+  if (s.startsWith('#')) {
+    final hex = s.substring(1);
+    if (hex.length == 3) {
+      final r = int.tryParse('${hex[0]}${hex[0]}', radix: 16);
+      final g = int.tryParse('${hex[1]}${hex[1]}', radix: 16);
+      final b = int.tryParse('${hex[2]}${hex[2]}', radix: 16);
+      if (r != null && g != null && b != null) {
+        return (r: r, g: g, b: b, a: 1.0, isTransparent: false);
+      }
+    } else if (hex.length == 6) {
+      final r = int.tryParse(hex.substring(0, 2), radix: 16);
+      final g = int.tryParse(hex.substring(2, 4), radix: 16);
+      final b = int.tryParse(hex.substring(4, 6), radix: 16);
+      if (r != null && g != null && b != null) {
+        return (r: r, g: g, b: b, a: 1.0, isTransparent: false);
+      }
+    } else if (hex.length == 8) {
+      final r = int.tryParse(hex.substring(0, 2), radix: 16);
+      final g = int.tryParse(hex.substring(2, 4), radix: 16);
+      final b = int.tryParse(hex.substring(4, 6), radix: 16);
+      final aByte = int.tryParse(hex.substring(6, 8), radix: 16);
+      if (r != null && g != null && b != null && aByte != null) {
+        final a = aByte / 255.0;
+        return (r: r, g: g, b: b, a: a, isTransparent: a <= 0.01);
+      }
+    }
+    return null;
+  }
+
+  final rgbMatch = RegExp(r'^rgba?\(\s*([^)]+)\s*\)$').firstMatch(s);
+  if (rgbMatch != null) {
+    final parts = rgbMatch
+        .group(1)!
+        .replaceAll('/', ' ')
+        .split(RegExp(r'[\s,]+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
+    if (parts.length >= 3) {
+      final r = _parseColorChannel(parts[0]);
+      final g = _parseColorChannel(parts[1]);
+      final b = _parseColorChannel(parts[2]);
+      final a = parts.length >= 4 ? _parseAlphaChannel(parts[3]) : 1.0;
+      if (r != null && g != null && b != null && a != null) {
+        return (r: r, g: g, b: b, a: a, isTransparent: a <= 0.01);
+      }
+    }
+  }
+  return null;
+}
+
+int? _parseColorChannel(String raw) {
+  final t = raw.trim();
+  if (t.endsWith('%')) {
+    final pct = double.tryParse(t.substring(0, t.length - 1));
+    if (pct == null) return null;
+    return (pct.clamp(0, 100) * 2.55).round();
+  }
+  final v = double.tryParse(t);
+  return v?.clamp(0, 255).round();
+}
+
+double? _parseAlphaChannel(String raw) {
+  final t = raw.trim();
+  if (t.endsWith('%')) {
+    final pct = double.tryParse(t.substring(0, t.length - 1));
+    if (pct == null) return null;
+    return (pct.clamp(0, 100) / 100.0);
+  }
+  final v = double.tryParse(t);
+  return v?.clamp(0.0, 1.0);
+}
+
+double _luminance(_CssRgba c) {
+  return (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255.0;
+}
+
+int _chroma(_CssRgba c) {
+  return math.max(c.r, math.max(c.g, c.b)) - math.min(c.r, math.min(c.g, c.b));
 }
 
 List<dom.Element> _directTableRows(dom.Element table) {

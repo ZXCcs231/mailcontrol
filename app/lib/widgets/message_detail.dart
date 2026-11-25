@@ -35,18 +35,23 @@ class MessageDetailView extends ConsumerStatefulWidget {
 
 class _MessageDetailViewState extends ConsumerState<MessageDetailView> {
   bool _preferPlain = false;
+  bool _forceLightPaper = false;
   int? _downloadingAttId;
   bool _translating = false;
   bool _onlyTranslation = false;
   int? _lastMsgId;
   MessageTranslation? _translation;
   String? _lastRawHtml;
+  bool? _lastDarkMode;
   String _cachedNormalizedHtml = '';
 
-  String _getNormalizedHtml(String rawHtml) {
-    if (_lastRawHtml == rawHtml) return _cachedNormalizedHtml;
+  String _getNormalizedHtml(String rawHtml, {required bool darkMode}) {
+    if (_lastRawHtml == rawHtml && _lastDarkMode == darkMode) {
+      return _cachedNormalizedHtml;
+    }
     _lastRawHtml = rawHtml;
-    _cachedNormalizedHtml = normalizeEmailHtml(rawHtml);
+    _lastDarkMode = darkMode;
+    _cachedNormalizedHtml = normalizeEmailHtml(rawHtml, darkMode: darkMode);
     return _cachedNormalizedHtml;
   }
 
@@ -139,12 +144,14 @@ class _MessageDetailViewState extends ConsumerState<MessageDetailView> {
       );
     }
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final acctColor = parseHexColor(msg.accountColor);
     final visibleAttachments = msg.attachments.where((a) => !a.isInline).toList();
     if (_lastMsgId != msg.id) {
       _lastMsgId = msg.id;
       _translation = null;
       _onlyTranslation = false;
+      _forceLightPaper = false;
     }
 
     return Container(
@@ -304,11 +311,20 @@ class _MessageDetailViewState extends ConsumerState<MessageDetailView> {
                                 style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 20, height: 1.35),
                               ),
                             ),
-                            if (msg.bodyHtml.isNotEmpty)
+                            if (msg.bodyHtml.isNotEmpty) ...[
+                              if (isDark && !_preferPlain)
+                                TextButton(
+                                  onPressed: () => setState(() => _forceLightPaper = !_forceLightPaper),
+                                  child: Text(
+                                    _forceLightPaper ? '深色正文' : '浅色信纸',
+                                    style: const TextStyle(fontSize: 12.5),
+                                  ),
+                                ),
                               TextButton(
                                 onPressed: () => setState(() => _preferPlain = !_preferPlain),
                                 child: Text(_preferPlain ? '切换 HTML' : '纯文本', style: const TextStyle(fontSize: 12.5)),
                               ),
+                            ],
                           ],
                         ),
                         const SizedBox(height: 16),
@@ -454,14 +470,26 @@ class _MessageDetailViewState extends ConsumerState<MessageDetailView> {
                                   const SizedBox(height: 6),
                                   SelectableText(
                                     '主题：${_translation!.translatedSubject}',
-                                    style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: pal.textPrimary),
+                                    style: TextStyle(
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: pal.textPrimary,
+                                      fontFamily: AppTheme.fontFamily,
+                                      fontFamilyFallback: AppTheme.fontFallback,
+                                    ),
                                   ),
                                 ],
                                 if (_translation!.translatedText.isNotEmpty) ...[
                                   const SizedBox(height: 8),
                                   SelectableText(
                                     _translation!.translatedText,
-                                    style: TextStyle(fontSize: 14.5, height: 1.68, color: pal.textPrimary),
+                                    style: TextStyle(
+                                      fontSize: 14.5,
+                                      height: 1.68,
+                                      color: pal.textPrimary,
+                                      fontFamily: AppTheme.fontFamily,
+                                      fontFamilyFallback: AppTheme.fontFallback,
+                                    ),
                                   ),
                                 ],
                               ],
@@ -470,32 +498,60 @@ class _MessageDetailViewState extends ConsumerState<MessageDetailView> {
                         ],
                         if (!_onlyTranslation) ...[
                           if (!_preferPlain && msg.bodyHtml.isNotEmpty)
-                            SelectionArea(
-                              child: SizedBox(
-                                width: double.infinity,
-                                child: HtmlWidget(
-                                  _getNormalizedHtml(msg.bodyHtml),
-                                  textStyle: TextStyle(fontSize: 14.5, height: 1.68, color: pal.textPrimary),
-                                  customStylesBuilder: (element) {
-                                    if (element.localName == 'img') {
-                                      return const {'max-width': '100%'};
-                                    }
-                                    return null;
-                                  },
-                                  onTapUrl: (url) async {
-                                    final uri = Uri.tryParse(url);
-                                    if (uri != null) {
-                                      await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                    }
-                                    return true;
-                                  },
-                                ),
-                              ),
+                            Builder(
+                              builder: (context) {
+                                final useLightPaper = isDark && _forceLightPaper;
+                                final useDarkHtml = isDark && !_forceLightPaper;
+                                final bodyWidget = SelectionArea(
+                                  child: SizedBox(
+                                    width: double.infinity,
+                                    child: HtmlWidget(
+                                      _getNormalizedHtml(msg.bodyHtml, darkMode: useDarkHtml),
+                                      textStyle: TextStyle(
+                                        fontSize: 14.5,
+                                        height: 1.68,
+                                        color: useLightPaper ? const Color(0xFF0F172A) : pal.textPrimary,
+                                        fontFamily: AppTheme.fontFamily,
+                                        fontFamilyFallback: AppTheme.fontFallback,
+                                      ),
+                                      customStylesBuilder: (element) {
+                                        if (element.localName == 'img') {
+                                          return const {'max-width': '100%'};
+                                        }
+                                        return null;
+                                      },
+                                      onTapUrl: (url) async {
+                                        final uri = Uri.tryParse(url);
+                                        if (uri != null) {
+                                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                        }
+                                        return true;
+                                      },
+                                    ),
+                                  ),
+                                );
+                                if (!useLightPaper) return bodyWidget;
+                                return Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFFFFFF),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: bodyWidget,
+                                );
+                              },
                             )
                           else
                             SelectableText(
                               msg.bodyText.isNotEmpty ? msg.bodyText : '（邮件正文为空）',
-                              style: TextStyle(fontSize: 14.5, height: 1.68, color: pal.textPrimary),
+                              style: TextStyle(
+                                fontSize: 14.5,
+                                height: 1.68,
+                                color: pal.textPrimary,
+                                fontFamily: AppTheme.fontFamily,
+                                fontFamilyFallback: AppTheme.fontFallback,
+                              ),
                             ),
                         ],
                       ],

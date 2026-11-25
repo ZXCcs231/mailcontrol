@@ -65,6 +65,46 @@ void main() {
     expect(normalized.toLowerCase(), isNot(contains('min-width')));
   });
 
+  test('strips non-monospace font-family and font face while keeping code font', () {
+    const fontHtml = '''
+      <div style="font-family: 'Google Sans', Roboto, Helvetica, Arial, sans-serif; font-size: 15px;">
+        <font face="SimSun" color="#202124">中文正文内容</font>
+        <code style="font-family: Consolas, monospace;">flutter test</code>
+      </div>
+    ''';
+
+    final normalized = normalizeEmailHtml(fontHtml);
+
+    expect(normalized.toLowerCase(), isNot(contains('google sans')));
+    expect(normalized.toLowerCase(), isNot(contains('simsun')));
+    expect(normalized.toLowerCase(), isNot(contains('face=')));
+    expect(normalized, contains('Consolas'));
+    expect(normalized, contains('中文正文内容'));
+  });
+
+  test('adapts dark text, light backgrounds and borders for dark mode while preserving buttons', () {
+    const darkAlertHtml = '''
+      <div style="background-color: #f5f5f5; color: #5f6368; border: 1px solid #dadce0;">
+        提示正文
+      </div>
+      <div style="background-color: #ffffff; color: rgba(0,0,0,0.87); border-color: #dadce0;">
+        主标题
+        <a href="https://example.com" style="background-color: #1a73e8; color: #ffffff;">查看活动</a>
+      </div>
+    ''';
+
+    final normalized = normalizeEmailHtml(darkAlertHtml, darkMode: true);
+    final lower = normalized.toLowerCase();
+
+    expect(lower, contains('#222e42'));
+    expect(lower, contains('#94a3b8'));
+    expect(lower, contains('#f1f5f9'));
+    expect(lower, contains('#334155'));
+    expect(lower, contains('background-color: transparent'));
+    expect(lower, contains('#1a73e8'));
+    expect(lower, contains('#ffffff'));
+  });
+
   testWidgets('renders normalized Google security alert without squeezing text into narrow column', (tester) async {
     tester.view.physicalSize = const Size(1000, 900);
     tester.view.devicePixelRatio = 1.0;

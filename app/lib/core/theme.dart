@@ -118,10 +118,10 @@ extension AppPaletteX on BuildContext {
 class AppTheme {
   static const Color primarySeed = Color(0xFF2563EB);
 
-  static String? get _fontFamily => Platform.isWindows ? 'Microsoft YaHei UI' : null;
-  static const List<String> _fontFallback = [
-    'Segoe UI',
+  static String? get fontFamily => Platform.isWindows ? 'Microsoft YaHei UI' : null;
+  static const List<String> fontFallback = [
     'Microsoft YaHei UI',
+    'Segoe UI',
     'PingFang SC',
     'Noto Sans SC',
     'sans-serif',
@@ -139,8 +139,8 @@ class AppTheme {
           labelMedium: base.labelMedium?.copyWith(fontSize: 12, fontWeight: FontWeight.w600, color: p.textSecondary),
         )
         .apply(
-          fontFamily: _fontFamily,
-          fontFamilyFallback: _fontFallback,
+          fontFamily: fontFamily,
+          fontFamilyFallback: fontFallback,
         );
   }
 
@@ -157,8 +157,8 @@ class AppTheme {
     final base = ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
-      fontFamily: _fontFamily,
-      fontFamilyFallback: _fontFallback,
+      fontFamily: fontFamily,
+      fontFamilyFallback: fontFallback,
     );
     return base.copyWith(
       scaffoldBackgroundColor: p.readingBg,
@@ -186,7 +186,7 @@ class AppTheme {
           foregroundColor: Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          textStyle: TextStyle(fontFamily: _fontFamily, fontFamilyFallback: _fontFallback, fontWeight: FontWeight.w600),
+          textStyle: TextStyle(fontFamily: fontFamily, fontFamilyFallback: fontFallback, fontWeight: FontWeight.w600),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -239,8 +239,8 @@ class AppTheme {
     final base = ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
-      fontFamily: _fontFamily,
-      fontFamilyFallback: _fontFallback,
+      fontFamily: fontFamily,
+      fontFamilyFallback: fontFallback,
     );
     return base.copyWith(
       scaffoldBackgroundColor: p.readingBg,
@@ -266,7 +266,7 @@ class AppTheme {
         style: FilledButton.styleFrom(
           elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          textStyle: TextStyle(fontFamily: _fontFamily, fontFamilyFallback: _fontFallback, fontWeight: FontWeight.w600),
+          textStyle: TextStyle(fontFamily: fontFamily, fontFamilyFallback: fontFallback, fontWeight: FontWeight.w600),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
