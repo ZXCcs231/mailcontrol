@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"mailcontrol-backend/internal/crypto"
+	"mailcontrol-backend/internal/db"
 	"mailcontrol-backend/internal/mailclient"
 	"mailcontrol-backend/internal/models"
 )
@@ -88,7 +90,7 @@ func (s *Server) ListMessages(c *gin.Context) {
 	whereSQL := strings.Join(where, " AND ")
 
 	var total int
-	countSQL := `SELECT COUNT(*) FROM messages m JOIN folders f ON f.id = m.folder_id WHERE ` + whereSQL
+	countSQL := `SELECT COUNT(*) FROM messages m JOIN mail_accounts a ON a.id = m.account_id JOIN folders f ON f.id = m.folder_id WHERE ` + whereSQL
 	if err := s.DB.QueryRow(countSQL, args...).Scan(&total); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -119,19 +121,25 @@ func (s *Server) ListMessages(c *gin.Context) {
 	for rows.Next() {
 		var m models.Message
 		var isRead, isStarred, isDraft, hasAtt int
+		var rawSent, rawRecv, rawCreated any
 		if err := rows.Scan(
 			&m.ID, &m.UserID, &m.AccountID, &m.AccountLabel, &m.AccountEmail, &m.AccountColor,
 			&m.FolderID, &m.FolderRole, &m.FolderName, &m.RemoteUID, &m.MessageIDHeader, &m.InReplyTo,
 			&m.Subject, &m.FromName, &m.FromAddr, &m.ToAddrs, &m.CcAddrs, &m.BccAddrs,
 			&m.Snippet, &isRead, &isStarred, &isDraft, &hasAtt,
-			&m.SentAt, &m.ReceivedAt, &m.CreatedAt,
-		); err == nil {
-			m.IsRead = isRead == 1
-			m.IsStarred = isStarred == 1
-			m.IsDraft = isDraft == 1
-			m.HasAttachments = hasAtt == 1
-			items = append(items, m)
+			&rawSent, &rawRecv, &rawCreated,
+		); err != nil {
+			log.Printf("list messages scan error: %v", err)
+			continue
 		}
+		m.IsRead = isRead == 1
+		m.IsStarred = isStarred == 1
+		m.IsDraft = isDraft == 1
+		m.HasAttachments = hasAtt == 1
+		m.SentAt = db.ParseSQLiteTime(rawSent)
+		m.ReceivedAt = db.ParseSQLiteTime(rawRecv)
+		m.CreatedAt = db.ParseSQLiteTime(rawCreated)
+		items = append(items, m)
 	}
 
 	for i := range items {
@@ -156,6 +164,7 @@ func (s *Server) GetMessage(c *gin.Context) {
 
 	var m models.Message
 	var isRead, isStarred, isDraft, hasAtt int
+	var rawSent, rawRecv, rawCreated any
 	err = s.DB.QueryRow(`
 		SELECT m.id, m.user_id, m.account_id, a.label, a.email_address, a.color,
 		       m.folder_id, f.role, f.name, m.remote_uid, m.message_id_header, m.in_reply_to,
@@ -171,7 +180,7 @@ func (s *Server) GetMessage(c *gin.Context) {
 		&m.FolderID, &m.FolderRole, &m.FolderName, &m.RemoteUID, &m.MessageIDHeader, &m.InReplyTo,
 		&m.Subject, &m.FromName, &m.FromAddr, &m.ToAddrs, &m.CcAddrs, &m.BccAddrs,
 		&m.Snippet, &m.BodyText, &m.BodyHTML, &isRead, &isStarred, &isDraft, &hasAtt,
-		&m.SentAt, &m.ReceivedAt, &m.CreatedAt,
+		&rawSent, &rawRecv, &rawCreated,
 	)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, gin.H{"error": "邮件不存在"})
@@ -185,6 +194,9 @@ func (s *Server) GetMessage(c *gin.Context) {
 	m.IsStarred = isStarred == 1
 	m.IsDraft = isDraft == 1
 	m.HasAttachments = hasAtt == 1
+	m.SentAt = db.ParseSQLiteTime(rawSent)
+	m.ReceivedAt = db.ParseSQLiteTime(rawRecv)
+	m.CreatedAt = db.ParseSQLiteTime(rawCreated)
 	m.Tags = s.loadMessageTags(m.ID)
 	m.Attachments = s.loadMessageAttachments(m.ID)
 
@@ -493,7 +505,7 @@ func (s *Server) SendMessage(c *gin.Context) {
 	}
 
 	sentFolderID, _ := mailclient.GetOrCreateFolderByRole(s.DB, acct.ID, "sent")
-	now := time.Now()
+	now := time.Now().UTC().Format("2006-01-02 15:04:05")
 	snippet := req.BodyText
 	if len([]rune(snippet)) > 140 {
 		snippet = string([]rune(snippet)[:140]) + "..."
@@ -563,7 +575,7 @@ func (s *Server) SaveDraft(c *gin.Context) {
 		return
 	}
 
-	now := time.Now()
+	now := time.Now().UTC().Format("2006-01-02 15:04:05")
 	snippet := req.BodyText
 	if len([]rune(snippet)) > 140 {
 		snippet = string([]rune(snippet)[:140]) + "..."

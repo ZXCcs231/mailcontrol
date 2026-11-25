@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -17,6 +18,12 @@ import (
 
 func setupTestRouter(t *testing.T) http.Handler {
 	t.Helper()
+	_, h := setupTestRouterWithDB(t)
+	return h
+}
+
+func setupTestRouterWithDB(t *testing.T) (*sql.DB, http.Handler) {
+	t.Helper()
 	tmpDir := t.TempDir()
 	t.Setenv("DATA_DIR", tmpDir)
 	cfg, err := config.Load()
@@ -31,7 +38,7 @@ func setupTestRouter(t *testing.T) http.Handler {
 
 	hub := syncer.NewHub()
 	sched := syncer.NewScheduler(conn, cfg, hub)
-	return NewRouter(conn, cfg, hub, sched)
+	return conn, NewRouter(conn, cfg, hub, sched)
 }
 
 func doReq(t *testing.T, h http.Handler, method, path, token string, body interface{}) *httptest.ResponseRecorder {
@@ -250,5 +257,93 @@ func TestEndToEndFlow(t *testing.T) {
 	})
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 when registration closed, got %d", w.Code)
+	}
+}
+
+func TestDirtySQLiteTimestampMessagesNotDropped(t *testing.T) {
+	conn, h := setupTestRouterWithDB(t)
+
+	w := doReq(t, h, "POST", "/api/auth/register", "", map[string]string{
+		"username": "tsuser",
+		"email":    "tsuser@qq.com",
+		"password": "password123",
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("register status=%d body=%s", w.Code, w.Body.String())
+	}
+	var authResp struct {
+		Token string `json:"token"`
+		User  struct {
+			ID int64 `json:"id"`
+		} `json:"user"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &authResp)
+
+	w = doReq(t, h, "POST", "/api/accounts", authResp.Token, map[string]interface{}{
+		"label":         "Gmail",
+		"email_address": "tsuser@gmail.com",
+		"password":      "secret",
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create account status=%d body=%s", w.Code, w.Body.String())
+	}
+	var acctResp struct {
+		ID int64 `json:"id"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &acctResp)
+
+	w = doReq(t, h, "POST", "/api/tags", authResp.Token, map[string]string{
+		"name":  "测试账单",
+		"color": "#f59e0b",
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create tag status=%d body=%s", w.Code, w.Body.String())
+	}
+	var tagResp struct {
+		ID int64 `json:"id"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &tagResp)
+
+	var folderID int64
+	if err := conn.QueryRow(`SELECT id FROM folders WHERE account_id = ? LIMIT 1`, acctResp.ID).Scan(&folderID); err != nil {
+		t.Fatalf("find folder: %v", err)
+	}
+
+	res, err := conn.Exec(`
+		INSERT INTO messages (
+			user_id, account_id, folder_id, subject, from_name, from_addr,
+			to_addrs, snippet, is_read, sent_at, received_at
+		) VALUES (?, ?, ?, 'Invoice #1001', 'Billing', 'billing@example.com', 'tsuser@gmail.com', 'Payment receipt', 0, ?, ?)`,
+		authResp.User.ID, acctResp.ID, folderID,
+		"2026-11-24 10:49:07 -0800 -0800",
+		"2026-11-24 18:49:07 +0000 +0000",
+	)
+	if err != nil {
+		t.Fatalf("insert dirty timestamp message: %v", err)
+	}
+	msgID, _ := res.LastInsertId()
+	if _, err := conn.Exec(`INSERT INTO message_tags (message_id, tag_id) VALUES (?, ?)`, msgID, tagResp.ID); err != nil {
+		t.Fatalf("tag message: %v", err)
+	}
+
+	w = doReq(t, h, "GET", fmt.Sprintf("/api/messages?view=tag&tag_id=%d", tagResp.ID), authResp.Token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list tag messages status=%d body=%s", w.Code, w.Body.String())
+	}
+	var listResp struct {
+		Total int `json:"total"`
+		Items []struct {
+			ID      int64  `json:"id"`
+			Subject string `json:"subject"`
+		} `json:"items"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &listResp)
+	if listResp.Total != 1 || len(listResp.Items) != 1 || listResp.Items[0].ID != msgID {
+		t.Fatalf("expected 1 message in tag view, got total=%d items=%+v", listResp.Total, listResp.Items)
+	}
+
+	w = doReq(t, h, "GET", fmt.Sprintf("/api/messages/%d", msgID), authResp.Token, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("get message status=%d body=%s", w.Code, w.Body.String())
 	}
 }

@@ -479,7 +479,8 @@ func parseAndStoreMessage(
 		msg.UserID, msg.AccountID, msg.FolderID, msg.RemoteUID, msg.MessageIDHeader, msg.InReplyTo,
 		msg.Subject, msg.FromName, msg.FromAddr, msg.ToAddrs, msg.CcAddrs, msg.BccAddrs,
 		msg.Snippet, msg.BodyText, msg.BodyHTML, boolToInt(msg.IsRead), boolToInt(msg.IsStarred),
-		boolToInt(msg.IsDraft), boolToInt(msg.HasAttachments), msg.SentAt, msg.ReceivedAt,
+		boolToInt(msg.IsDraft), boolToInt(msg.HasAttachments),
+		msg.SentAt.UTC().Format("2006-01-02 15:04:05"), msg.ReceivedAt.UTC().Format("2006-01-02 15:04:05"),
 	)
 	if err != nil {
 		return msg, err

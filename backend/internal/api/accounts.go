@@ -385,6 +385,7 @@ func (s *Server) GetStats(c *gin.Context) {
 			SELECT COUNT(*)
 			FROM message_tags mt
 			JOIN messages m ON m.id = mt.message_id
+			JOIN mail_accounts a ON a.id = m.account_id
 			JOIN folders f ON f.id = m.folder_id
 			WHERE mt.tag_id = t.id AND m.user_id = ? AND m.is_read = 0 AND f.role NOT IN ('trash', 'spam')
 		), 0)

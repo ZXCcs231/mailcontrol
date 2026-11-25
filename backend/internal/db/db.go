@@ -4,6 +4,9 @@ import (
 	"database/sql"
 	"fmt"
 	"path/filepath"
+	"regexp"
+	"strings"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -206,5 +209,102 @@ CREATE INDEX IF NOT EXISTS idx_rules_user ON rules(user_id, enabled, priority);
 		WHERE id = (SELECT MIN(id) FROM users)
 		  AND NOT EXISTS (SELECT 1 FROM users WHERE is_admin = 1)`)
 
+	fixDirtyMessageTimestamps(conn)
 	return nil
+}
+
+var (
+	monotonicSuffixRe   = regexp.MustCompile(`\s+m=[+-]\d+(?:\.\d+)?$`)
+	repeatedOffsetTailRe = regexp.MustCompile(`(\s+[+-]\d{4})\s+[+-]\d{4}$`)
+)
+
+// ParseSQLiteTime 容错解析 SQLite 读取出的时间字段（兼容双数字时区偏移如 "-0800 -0800"）。
+func ParseSQLiteTime(v any) time.Time {
+	switch val := v.(type) {
+	case nil:
+		return time.Time{}
+	case time.Time:
+		return val.UTC()
+	case []byte:
+		return ParseSQLiteTime(string(val))
+	case string:
+		s := strings.TrimSpace(val)
+		if s == "" {
+			return time.Time{}
+		}
+		s = monotonicSuffixRe.ReplaceAllString(s, "")
+		for _, layout := range []string{
+			time.RFC3339Nano,
+			time.RFC3339,
+			"2006-01-02 15:04:05.999999999 -0700 MST",
+			"2006-01-02 15:04:05 -0700 MST",
+			"2006-01-02 15:04:05.999999999 -0700",
+			"2006-01-02 15:04:05 -0700",
+			"2006-01-02 15:04:05.999999999",
+			"2006-01-02 15:04:05",
+			"2006-01-02T15:04:05",
+		} {
+			if t, err := time.Parse(layout, s); err == nil {
+				return t.UTC()
+			}
+		}
+		// 去除诸如 "2026-11-24 10:49:07 -0800 -0800" 的重复数字偏移尾缀
+		cleaned := repeatedOffsetTailRe.ReplaceAllString(s, "$1")
+		if cleaned != s {
+			for _, layout := range []string{
+				"2006-01-02 15:04:05.999999999 -0700",
+				"2006-01-02 15:04:05 -0700",
+			} {
+				if t, err := time.Parse(layout, cleaned); err == nil {
+					return t.UTC()
+				}
+			}
+		}
+		return time.Time{}
+	default:
+		return time.Time{}
+	}
+}
+
+func fixDirtyMessageTimestamps(conn *sql.DB) {
+	rows, err := conn.Query(`
+		SELECT id, sent_at, received_at
+		FROM messages
+		WHERE CAST(sent_at AS TEXT) LIKE '% -%'
+		   OR CAST(sent_at AS TEXT) LIKE '% +%'
+		   OR CAST(received_at AS TEXT) LIKE '% -%'
+		   OR CAST(received_at AS TEXT) LIKE '% +%'`)
+	if err != nil {
+		return
+	}
+	type tsFix struct {
+		id       int64
+		sentAt   string
+		recvAt   string
+	}
+	var fixes []tsFix
+	for rows.Next() {
+		var id int64
+		var rawSent, rawRecv any
+		if err := rows.Scan(&id, &rawSent, &rawRecv); err == nil {
+			s := ParseSQLiteTime(rawSent)
+			r := ParseSQLiteTime(rawRecv)
+			if s.IsZero() {
+				s = time.Now().UTC()
+			}
+			if r.IsZero() {
+				r = s
+			}
+			fixes = append(fixes, tsFix{
+				id:     id,
+				sentAt: s.UTC().Format("2006-01-02 15:04:05"),
+				recvAt: r.UTC().Format("2006-01-02 15:04:05"),
+			})
+		}
+	}
+	_ = rows.Close()
+
+	for _, f := range fixes {
+		_, _ = conn.Exec(`UPDATE messages SET sent_at = ?, received_at = ? WHERE id = ?`, f.sentAt, f.recvAt, f.id)
+	}
 }
