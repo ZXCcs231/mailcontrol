@@ -244,6 +244,7 @@ class MailState {
   final int page;
   final bool loadingList;
   final bool loadingDetail;
+  final int? openingMessageId;
   final bool syncing;
   final String? toastMessage;
   final int? pendingOpenMessageId;
@@ -270,6 +271,7 @@ class MailState {
     this.page = 1,
     this.loadingList = false,
     this.loadingDetail = false,
+    this.openingMessageId,
     this.syncing = false,
     this.toastMessage,
     this.pendingOpenMessageId,
@@ -301,6 +303,8 @@ class MailState {
     int? page,
     bool? loadingList,
     bool? loadingDetail,
+    int? openingMessageId,
+    bool clearOpeningMessageId = false,
     bool? syncing,
     String? toastMessage,
     bool clearToast = false,
@@ -329,6 +333,7 @@ class MailState {
         page: page ?? this.page,
         loadingList: loadingList ?? this.loadingList,
         loadingDetail: loadingDetail ?? this.loadingDetail,
+        openingMessageId: clearOpeningMessageId ? null : (openingMessageId ?? this.openingMessageId),
         syncing: syncing ?? this.syncing,
         toastMessage: clearToast ? null : (toastMessage ?? this.toastMessage),
         pendingOpenMessageId: clearPendingOpenMessageId
@@ -344,6 +349,7 @@ class MailNotifier extends Notifier<MailState> {
   int _highestSeenInboxId = 0;
   final Set<int> _notifiedIds = <int>{};
   bool _pollingNewMessages = false;
+  int _openSeq = 0;
 
   @override
   MailState build() {
@@ -676,11 +682,13 @@ class MailNotifier extends Notifier<MailState> {
   }
 
   Future<void> openMessage(int id) async {
-    state = state.copyWith(loadingDetail: true);
+    if (state.loadingDetail && state.openingMessageId == id) return;
+    final seq = ++_openSeq;
+    state = state.copyWith(loadingDetail: true, openingMessageId: id);
     try {
       final msg = await _api.getMessage(id);
+      if (seq != _openSeq) return;
       if (!msg.isRead) {
-        await _api.patchMessage(id, isRead: true);
         final updatedList = state.messages
             .map((m) => m.id == id ? _copyMessageRead(m, true) : m)
             .toList();
@@ -688,14 +696,31 @@ class MailNotifier extends Notifier<MailState> {
           selectedMessage: _copyMessageRead(msg, true),
           messages: updatedList,
           loadingDetail: false,
+          clearOpeningMessageId: true,
         );
-        unawaited(refreshMetadata());
+        unawaited(_markMessageReadInBackground(id));
       } else {
-        state = state.copyWith(selectedMessage: msg, loadingDetail: false);
+        state = state.copyWith(
+          selectedMessage: msg,
+          loadingDetail: false,
+          clearOpeningMessageId: true,
+        );
       }
     } catch (_) {
-      state = state.copyWith(loadingDetail: false);
+      if (seq != _openSeq) return;
+      state = state.copyWith(
+        loadingDetail: false,
+        clearOpeningMessageId: true,
+        toastMessage: '加载邮件失败，请稍后重试',
+      );
     }
+  }
+
+  Future<void> _markMessageReadInBackground(int id) async {
+    try {
+      await _api.patchMessage(id, isRead: true);
+      await refreshMetadata();
+    } catch (_) {}
   }
 
   void toggleSelectId(int id) {

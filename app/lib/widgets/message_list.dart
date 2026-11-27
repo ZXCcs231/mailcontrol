@@ -224,6 +224,7 @@ class _MessageListState extends ConsumerState<MessageList> {
               ),
             ),
           const SizedBox(height: 4),
+          if (mail.loadingDetail) const LinearProgressIndicator(minHeight: 2),
           Expanded(
             child: mail.loadingList && mail.messages.isEmpty
                 ? const Center(child: CircularProgressIndicator())
@@ -240,13 +241,21 @@ class _MessageListState extends ConsumerState<MessageList> {
                           itemBuilder: (context, idx) {
                             final msg = mail.messages[idx];
                             final isSelected = mail.selectedMessage?.id == msg.id;
+                            final isOpening = mail.loadingDetail && mail.openingMessageId == msg.id;
                             final isChecked = mail.selectedIds.contains(msg.id);
                             return _MessageTile(
                               message: msg,
                               isSelected: isSelected,
+                              isOpening: isOpening,
                               isChecked: isChecked,
                               hasSelectionMode: mail.selectedIds.isNotEmpty,
-                              onTap: () => widget.onOpenMessage(msg),
+                              onTap: () {
+                                final isNarrow = MediaQuery.of(context).size.width < 900;
+                                if (mail.loadingDetail && (isNarrow || mail.openingMessageId == msg.id)) {
+                                  return;
+                                }
+                                widget.onOpenMessage(msg);
+                              },
                               onToggleCheck: () => notifier.toggleSelectId(msg.id),
                               onToggleStar: () => notifier.toggleStar(msg),
                               onToggleRead: () => notifier.toggleRead(msg),
@@ -330,6 +339,7 @@ class _MessageListState extends ConsumerState<MessageList> {
 class _MessageTile extends StatelessWidget {
   final MailMessage message;
   final bool isSelected;
+  final bool isOpening;
   final bool isChecked;
   final bool hasSelectionMode;
   final VoidCallback onTap;
@@ -342,6 +352,7 @@ class _MessageTile extends StatelessWidget {
   const _MessageTile({
     required this.message,
     required this.isSelected,
+    this.isOpening = false,
     required this.isChecked,
     required this.hasSelectionMode,
     required this.onTap,
@@ -377,7 +388,7 @@ class _MessageTile extends StatelessWidget {
       onLongPress: onToggleCheck,
       builder: (context, hovering) {
         final showCheckbox = hovering || isChecked || hasSelectionMode;
-        final bg = isSelected
+        final bg = (isSelected || isOpening)
             ? p.activeBg
             : (hovering ? p.hoverBg : (!message.isRead ? p.accentSoft.withValues(alpha: 0.45) : Colors.transparent));
 
@@ -437,7 +448,16 @@ class _MessageTile extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (message.hasAttachments)
+                        if (isOpening)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: SizedBox(
+                              width: 13,
+                              height: 13,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: p.accent),
+                            ),
+                          )
+                        else if (message.hasAttachments)
                           Padding(
                             padding: const EdgeInsets.only(right: 5),
                             child: Icon(Icons.attach_file_rounded, size: 14, color: p.textMuted),

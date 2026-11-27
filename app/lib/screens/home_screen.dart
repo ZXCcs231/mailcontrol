@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -21,6 +23,28 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+  bool _detailRouteOpen = false;
+
+  void _openMobileDetailPage() {
+    if (_detailRouteOpen || !mounted) return;
+    _detailRouteOpen = true;
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => Scaffold(
+              body: SafeArea(
+                child: MessageDetailView(
+                  message: null,
+                  isStandalone: true,
+                  onReplyOrForward: (m, mode) => _openCompose(refMessage: m, mode: mode),
+                  onDeleted: () => Navigator.of(context).pop(),
+                ),
+              ),
+            ),
+          ),
+        )
+        .whenComplete(() => _detailRouteOpen = false);
+  }
 
   @override
   void initState() {
@@ -95,20 +119,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (next == null) return;
       ref.read(mailProvider.notifier).clearPendingOpenMessageId();
       if (MediaQuery.of(context).size.width < 900) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => Scaffold(
-              body: SafeArea(
-                child: MessageDetailView(
-                  message: null,
-                  isStandalone: true,
-                  onReplyOrForward: (m, mode) => _openCompose(refMessage: m, mode: mode),
-                  onDeleted: () => Navigator.of(context).pop(),
-                ),
-              ),
-            ),
-          ),
-        );
+        _openMobileDetailPage();
       }
     });
 
@@ -170,23 +181,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
               onAddAccount: () => _openAccountModal(),
               onEditAccount: (acct) => _openAccountModal(acct),
-              onOpenMessage: (msg) async {
-                await notifier.openMessage(msg.id);
-                if (!context.mounted) return;
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => Scaffold(
-                      body: SafeArea(
-                        child: MessageDetailView(
-                          message: null,
-                          isStandalone: true,
-                          onReplyOrForward: (m, mode) => _openCompose(refMessage: m, mode: mode),
-                          onDeleted: () => Navigator.of(context).pop(),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
+              onOpenMessage: (msg) {
+                if (_detailRouteOpen || ref.read(mailProvider).loadingDetail) return;
+                unawaited(notifier.openMessage(msg.id));
+                _openMobileDetailPage();
               },
             ),
           ),

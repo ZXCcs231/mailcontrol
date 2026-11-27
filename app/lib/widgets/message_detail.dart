@@ -138,28 +138,90 @@ class _MessageDetailViewState extends ConsumerState<MessageDetailView> {
     final pal = context.palette;
     final scheme = Theme.of(context).colorScheme;
 
-    if (mail.loadingDetail && msg == null) {
-      return Container(color: pal.readingBg, child: const Center(child: CircularProgressIndicator()));
+    final isOpeningTarget = mail.loadingDetail &&
+        (msg == null || (mail.openingMessageId != null && msg.id != mail.openingMessageId));
+
+    if (isOpeningTarget) {
+      return Container(
+        color: pal.readingBg,
+        child: Column(
+          children: [
+            if (widget.isStandalone)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                  child: IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.arrow_back_rounded),
+                  ),
+                ),
+              ),
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(color: pal.accentSoft, shape: BoxShape.circle),
+                      alignment: Alignment.center,
+                      child: SizedBox(
+                        width: 26,
+                        height: 26,
+                        child: CircularProgressIndicator(strokeWidth: 2.6, color: pal.accent),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      '正在加载邮件内容...',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: pal.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
     }
     if (msg == null) {
       return Container(
         color: pal.readingBg,
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 68,
-                height: 68,
-                decoration: BoxDecoration(color: pal.accentSoft, shape: BoxShape.circle),
-                child: Icon(Icons.mail_outline_rounded, size: 34, color: pal.accent),
+        child: Column(
+          children: [
+            if (widget.isStandalone)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                  child: IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.arrow_back_rounded),
+                  ),
+                ),
               ),
-              const SizedBox(height: 14),
-              Text('选择一封邮件开始阅读', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: pal.textPrimary)),
-              const SizedBox(height: 4),
-              Text('支持 HTML 富文本预览、附件下载及一键多语种翻译', style: TextStyle(fontSize: 12.5, color: pal.textMuted)),
-            ],
-          ),
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 68,
+                      height: 68,
+                      decoration: BoxDecoration(color: pal.accentSoft, shape: BoxShape.circle),
+                      child: Icon(Icons.mail_outline_rounded, size: 34, color: pal.accent),
+                    ),
+                    const SizedBox(height: 14),
+                    Text('选择一封邮件开始阅读', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: pal.textPrimary)),
+                    const SizedBox(height: 4),
+                    Text('支持 HTML 富文本预览、附件下载及一键多语种翻译', style: TextStyle(fontSize: 12.5, color: pal.textMuted)),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       );
     }
