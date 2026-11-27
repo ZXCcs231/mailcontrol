@@ -12,12 +12,14 @@ import 'brand_widgets.dart';
 class MessageList extends ConsumerStatefulWidget {
   final VoidCallback? onOpenDrawer;
   final VoidCallback onAddAccount;
+  final ValueChanged<MailAccount>? onEditAccount;
   final ValueChanged<MailMessage> onOpenMessage;
 
   const MessageList({
     super.key,
     this.onOpenDrawer,
     required this.onAddAccount,
+    this.onEditAccount,
     required this.onOpenMessage,
   });
 
@@ -102,6 +104,20 @@ class _MessageListState extends ConsumerState<MessageList> {
                     ],
                   ),
                 ),
+                if (mail.activeAccountId != null)
+                  Builder(
+                    builder: (context) {
+                      final activeAcct = mail.accounts.where((e) => e.id == mail.activeAccountId).firstOrNull;
+                      if (activeAcct == null || widget.onEditAccount == null) {
+                        return const SizedBox.shrink();
+                      }
+                      return IconButton(
+                        tooltip: '邮箱设置 / 修改名称',
+                        onPressed: () => widget.onEditAccount?.call(activeAcct),
+                        icon: Icon(Icons.edit_outlined, size: 19, color: p.textSecondary),
+                      );
+                    },
+                  ),
                 IconButton(
                   tooltip: '同步全部邮箱',
                   onPressed: mail.syncing ? null : () => notifier.syncAllAccounts(),

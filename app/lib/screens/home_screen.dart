@@ -91,6 +91,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       }
     });
 
+    ref.listen<int?>(mailProvider.select((s) => s.pendingOpenMessageId), (prev, next) {
+      if (next == null) return;
+      ref.read(mailProvider.notifier).clearPendingOpenMessageId();
+      if (MediaQuery.of(context).size.width < 900) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => Scaffold(
+              body: SafeArea(
+                child: MessageDetailView(
+                  message: null,
+                  isStandalone: true,
+                  onReplyOrForward: (m, mode) => _openCompose(refMessage: m, mode: mode),
+                  onDeleted: () => Navigator.of(context).pop(),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+    });
+
     final mail = ref.watch(mailProvider);
     final notifier = ref.read(mailProvider.notifier);
 
@@ -115,6 +136,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   width: 390,
                   child: MessageList(
                     onAddAccount: () => _openAccountModal(),
+                    onEditAccount: (acct) => _openAccountModal(acct),
                     onOpenMessage: (msg) => notifier.openMessage(msg.id),
                   ),
                 ),
@@ -147,6 +169,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: MessageList(
               onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
               onAddAccount: () => _openAccountModal(),
+              onEditAccount: (acct) => _openAccountModal(acct),
               onOpenMessage: (msg) async {
                 await notifier.openMessage(msg.id);
                 if (!context.mounted) return;

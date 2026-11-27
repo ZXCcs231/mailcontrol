@@ -68,7 +68,7 @@ class _AccountModalState extends ConsumerState<AccountModal> {
       _color = e.color;
       _isDefault = e.isDefault;
       _syncEnabled = e.syncEnabled;
-      _showAdvanced = true;
+      _showAdvanced = false;
     } else {
       Future.microtask(() {
         final presets = ref.read(mailProvider).providers;
@@ -185,6 +185,7 @@ class _AccountModalState extends ConsumerState<AccountModal> {
       await Future.wait([
         ref.read(mailProvider.notifier).refreshMetadata(),
         ref.read(mailProvider.notifier).loadMessages(silent: true),
+        if (widget.existing != null) ref.read(mailProvider.notifier).refreshSelectedIfAccount(widget.existing!.id),
       ]);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -237,6 +238,11 @@ class _AccountModalState extends ConsumerState<AccountModal> {
           padding: const EdgeInsets.fromLTRB(18, 14, 12, 8),
           child: Row(
             children: [
+              if (!widget.isDialog)
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                ),
               Text(
                 widget.existing != null ? '编辑邮箱账号' : '添加主流邮箱账号',
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
@@ -302,24 +308,35 @@ class _AccountModalState extends ConsumerState<AccountModal> {
                   ),
                   const SizedBox(height: 14),
                 ],
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _emailCtrl,
-                        onChanged: _onEmailChanged,
-                        keyboardType: TextInputType.emailAddress,
-                        decoration: const InputDecoration(labelText: '邮箱地址 *', hintText: 'example@qq.com'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: _labelCtrl,
-                        decoration: const InputDecoration(labelText: '账号备注名称', hintText: '如：个人QQ / 工作邮箱'),
-                      ),
-                    ),
-                  ],
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final emailField = TextField(
+                      controller: _emailCtrl,
+                      onChanged: _onEmailChanged,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(labelText: '邮箱地址 *', hintText: 'example@qq.com'),
+                    );
+                    final labelField = TextField(
+                      controller: _labelCtrl,
+                      decoration: const InputDecoration(labelText: '账号备注名称', hintText: '如：个人QQ / 工作邮箱'),
+                    );
+                    if (constraints.maxWidth >= 460) {
+                      return Row(
+                        children: [
+                          Expanded(child: emailField),
+                          const SizedBox(width: 12),
+                          Expanded(child: labelField),
+                        ],
+                      );
+                    }
+                    return Column(
+                      children: [
+                        labelField,
+                        const SizedBox(height: 12),
+                        emailField,
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 12),
                 TextField(

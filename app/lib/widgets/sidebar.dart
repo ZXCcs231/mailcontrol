@@ -408,6 +408,58 @@ class _SidebarState extends ConsumerState<Sidebar> {
     );
   }
 
+  Future<void> _showRenameAccountDialog(BuildContext context, MailAccount acct) async {
+    final ctrl = TextEditingController(text: acct.label);
+    ctrl.selection = TextSelection(baseOffset: 0, extentOffset: ctrl.text.length);
+    final newLabel = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('修改邮箱名称'),
+        content: SizedBox(
+          width: 340,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                acct.emailAddress,
+                style: TextStyle(fontSize: 12.5, color: ctx.palette.textMuted),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: '邮箱备注名称',
+                  hintText: '例如：个人QQ / 工作邮箱',
+                ),
+                onSubmitted: (val) => Navigator.pop(ctx, val.trim()),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (newLabel == null || newLabel.isEmpty || newLabel == acct.label) return;
+    try {
+      await ref.read(mailProvider.notifier).renameAccount(acct, newLabel);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ref.read(apiClientProvider).extractError(e))),
+        );
+      }
+    }
+  }
+
   Widget _buildAccountGroup(
     BuildContext context,
     MailAccount acct,
@@ -428,6 +480,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
             _closeIfDrawer();
             notifier.selectView('inbox', accountId: acct.id);
           },
+          onLongPress: () => _showRenameAccountDialog(context, acct),
           builder: (context, hovering) => Container(
             margin: const EdgeInsets.symmetric(vertical: 1.5),
             padding: const EdgeInsets.fromLTRB(6, 7, 4, 7),
@@ -486,25 +539,65 @@ class _SidebarState extends ConsumerState<Sidebar> {
                       style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600),
                     ),
                   ),
-                if (hovering || acct.lastSyncStatus == 'syncing')
-                  IconButton(
-                    tooltip: '立即同步',
-                    icon: acct.lastSyncStatus == 'syncing'
-                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                        : Icon(Icons.sync_rounded, size: 15, color: p.textSecondary),
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () => notifier.syncSingleAccount(acct.id),
+                if (acct.lastSyncStatus == 'syncing')
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4),
+                    child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
                   ),
-                if (hovering)
-                  IconButton(
-                    tooltip: '邮箱设置',
-                    icon: Icon(Icons.settings_outlined, size: 15, color: p.textSecondary),
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () {
+                PopupMenuButton<String>(
+                  tooltip: '邮箱操作',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  icon: Icon(
+                    Icons.more_vert_rounded,
+                    size: 17,
+                    color: (hovering || isSelected || widget.inDrawer)
+                        ? p.textSecondary
+                        : p.textMuted.withValues(alpha: 0.55),
+                  ),
+                  onSelected: (action) {
+                    if (action == 'rename') {
+                      _showRenameAccountDialog(context, acct);
+                    } else if (action == 'sync') {
+                      notifier.syncSingleAccount(acct.id);
+                    } else if (action == 'settings') {
                       _closeIfDrawer();
                       widget.onOpenAccountModal(acct);
-                    },
-                  ),
+                    }
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: 'rename',
+                      child: Row(
+                        children: [
+                          Icon(Icons.drive_file_rename_outline_rounded, size: 17),
+                          SizedBox(width: 8),
+                          Text('重命名邮箱'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'sync',
+                      child: Row(
+                        children: [
+                          Icon(Icons.sync_rounded, size: 17),
+                          SizedBox(width: 8),
+                          Text('立即同步'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'settings',
+                      child: Row(
+                        children: [
+                          Icon(Icons.settings_outlined, size: 17),
+                          SizedBox(width: 8),
+                          Text('邮箱设置'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),

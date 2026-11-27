@@ -117,7 +117,10 @@ class AuthNotifier extends Notifier<AuthState> {
         validToken = null;
         await prefs.remove(_kToken);
         api.configure(baseUrl: savedUrl, token: null);
+        unawaited(ref.read(notificationServiceProvider).stopAndroidPushService());
       }
+    } else {
+      unawaited(ref.read(notificationServiceProvider).stopAndroidPushService());
     }
 
     state = state.copyWith(
@@ -210,6 +213,7 @@ class AuthNotifier extends Notifier<AuthState> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_kToken);
     ref.read(sseClientProvider).disconnect();
+    unawaited(ref.read(notificationServiceProvider).stopAndroidPushService());
     ref.read(mailProvider.notifier).resetNotificationState();
     ref.read(apiClientProvider).configure(baseUrl: state.baseUrl, token: null);
     state = state.copyWith(clearToken: true, clearUser: true, clearError: true);
@@ -242,6 +246,7 @@ class MailState {
   final bool loadingDetail;
   final bool syncing;
   final String? toastMessage;
+  final int? pendingOpenMessageId;
 
   const MailState({
     this.providers = const [],
@@ -267,6 +272,7 @@ class MailState {
     this.loadingDetail = false,
     this.syncing = false,
     this.toastMessage,
+    this.pendingOpenMessageId,
   });
 
   MailState copyWith({
@@ -298,6 +304,8 @@ class MailState {
     bool? syncing,
     String? toastMessage,
     bool clearToast = false,
+    int? pendingOpenMessageId,
+    bool clearPendingOpenMessageId = false,
   }) =>
       MailState(
         providers: providers ?? this.providers,
@@ -323,6 +331,9 @@ class MailState {
         loadingDetail: loadingDetail ?? this.loadingDetail,
         syncing: syncing ?? this.syncing,
         toastMessage: clearToast ? null : (toastMessage ?? this.toastMessage),
+        pendingOpenMessageId: clearPendingOpenMessageId
+            ? null
+            : (pendingOpenMessageId ?? this.pendingOpenMessageId),
       );
 }
 
@@ -359,7 +370,16 @@ class MailNotifier extends Notifier<MailState> {
 
     final notif = ref.read(notificationServiceProvider);
     await notif.init(onTap: _handleNotificationTap);
-    unawaited(notif.requestPermissionIfNeeded());
+    if (Platform.isAndroid) {
+      await notif.requestPermissionIfNeeded();
+      await notif.startAndroidPushService(baseUrl: auth.baseUrl, token: auth.token!);
+      final pendingId = await notif.consumePendingAndroidMessageId();
+      if (pendingId != null && pendingId > 0) {
+        _handleNotificationTap('msg:$pendingId');
+      }
+    } else {
+      unawaited(notif.requestPermissionIfNeeded());
+    }
 
     final sse = ref.read(sseClientProvider);
     sse.connect(auth.baseUrl, auth.token!);
@@ -424,6 +444,10 @@ class MailNotifier extends Notifier<MailState> {
 
   Future<void> _notifyFromSseNewMessages(SseEvent evt) async {
     if (!ref.read(authProvider).isAuthenticated) return;
+    final notif = ref.read(notificationServiceProvider);
+    if (Platform.isAndroid && notif.androidPushServiceActive) {
+      return;
+    }
     List<MailMessage> fresh = const [];
     try {
       final res = await _api.getMessages(
@@ -452,7 +476,7 @@ class MailNotifier extends Notifier<MailState> {
     final notifId = fresh.isNotEmpty
         ? fresh.first.id
         : (DateTime.now().millisecondsSinceEpoch & 0x7fffffff);
-    await ref.read(notificationServiceProvider).showNewMailNotification(
+    await notif.showNewMailNotification(
           id: notifId,
           title: content.title,
           body: content.body,
@@ -482,16 +506,19 @@ class MailNotifier extends Notifier<MailState> {
       }
 
       if (freshUnread.isNotEmpty) {
-        final content = buildNewMailNotificationContent(
-          accountLabel: freshUnread.first.accountLabel,
-          freshMessages: freshUnread,
-        );
-        await ref.read(notificationServiceProvider).showNewMailNotification(
-              id: freshUnread.first.id,
-              title: content.title,
-              body: content.body,
-              payload: content.payload,
-            );
+        final notif = ref.read(notificationServiceProvider);
+        if (!(Platform.isAndroid && notif.androidPushServiceActive)) {
+          final content = buildNewMailNotificationContent(
+            accountLabel: freshUnread.first.accountLabel,
+            freshMessages: freshUnread,
+          );
+          await notif.showNewMailNotification(
+                id: freshUnread.first.id,
+                title: content.title,
+                body: content.body,
+                payload: content.payload,
+              );
+        }
         unawaited(refreshMetadata());
         unawaited(loadMessages(silent: true));
       }
@@ -512,8 +539,15 @@ class MailNotifier extends Notifier<MailState> {
       final id = int.tryParse(payload.substring(4));
       if (id != null) {
         unawaited(openMessage(id));
+        if (!Platform.isWindows) {
+          state = state.copyWith(pendingOpenMessageId: id);
+        }
       }
     }
+  }
+
+  void clearPendingOpenMessageId() {
+    state = state.copyWith(clearPendingOpenMessageId: true);
   }
 
   void clearToast() {
@@ -755,6 +789,42 @@ class MailNotifier extends Notifier<MailState> {
       await _api.syncAccount(accountId);
     } catch (_) {
       state = state.copyWith(syncing: false);
+    }
+  }
+
+  Future<void> renameAccount(MailAccount acct, String newLabel) async {
+    final trimmed = newLabel.trim();
+    if (trimmed.isEmpty || trimmed == acct.label) return;
+    await _api.updateAccount(acct.id, {
+      'account_id': acct.id,
+      'label': trimmed,
+      'email_address': acct.emailAddress,
+      'provider_id': acct.providerId,
+      'imap_host': acct.imapHost,
+      'imap_port': acct.imapPort,
+      'imap_tls': acct.imapTls,
+      'smtp_host': acct.smtpHost,
+      'smtp_port': acct.smtpPort,
+      'smtp_tls': acct.smtpTls,
+      'username': acct.username.isEmpty ? acct.emailAddress : acct.username,
+      'password': '',
+      'color': acct.color,
+      'is_default': acct.isDefault,
+      'sync_enabled': acct.syncEnabled,
+      'sync_interval_sec': acct.syncIntervalSec,
+    });
+    await Future.wait([refreshMetadata(), loadMessages(silent: true)]);
+    await refreshSelectedIfAccount(acct.id);
+    state = state.copyWith(toastMessage: '邮箱名称已更新为「$trimmed」');
+  }
+
+  Future<void> refreshSelectedIfAccount(int accountId) async {
+    final selected = state.selectedMessage;
+    if (selected != null && selected.accountId == accountId) {
+      try {
+        final detail = await _api.getMessage(selected.id);
+        state = state.copyWith(selectedMessage: detail);
+      } catch (_) {}
     }
   }
 
