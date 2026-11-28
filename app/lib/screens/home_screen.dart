@@ -10,6 +10,7 @@ import '../widgets/message_list.dart';
 import '../widgets/sidebar.dart';
 import 'account_modal.dart';
 import 'compose_screen.dart';
+import 'push_screen.dart';
 import 'rules_screen.dart';
 import 'signatures_screen.dart';
 import 'tags_screen.dart';
@@ -140,6 +141,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   onOpenAccountModal: _openAccountModal,
                   onOpenRules: () => _openPage(const RulesScreen(isDialog: true)),
                   onOpenSignatures: () => _openPage(const SignaturesScreen(isDialog: true)),
+                  onOpenPushChannels: () => _openPage(const PushScreen(isDialog: true)),
                   onOpenTags: () => _openPage(const TagsScreen(isDialog: true)),
                 ),
                 const VerticalDivider(width: 1),
@@ -173,6 +175,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               onOpenAccountModal: _openAccountModal,
               onOpenRules: () => _openPage(const RulesScreen()),
               onOpenSignatures: () => _openPage(const SignaturesScreen()),
+              onOpenPushChannels: () => _openPage(const PushScreen()),
               onOpenTags: () => _openPage(const TagsScreen()),
             ),
           ),

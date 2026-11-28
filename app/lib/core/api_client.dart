@@ -342,6 +342,31 @@ class ApiClient {
     await _dio.delete('/api/signatures/$id');
   }
 
+  Future<List<PushChannel>> getPushChannels() async {
+    final resp = await _dio.get('/api/push-channels');
+    final list = (resp.data['items'] as List?) ?? const [];
+    return list.map((e) => PushChannel.fromJson(Map<String, dynamic>.from(e))).toList();
+  }
+
+  Future<PushChannel> createPushChannel(Map<String, dynamic> payload) async {
+    final resp = await _dio.post('/api/push-channels', data: payload);
+    return PushChannel.fromJson(Map<String, dynamic>.from(resp.data));
+  }
+
+  Future<PushChannel> updatePushChannel(int id, Map<String, dynamic> payload) async {
+    final resp = await _dio.put('/api/push-channels/$id', data: payload);
+    return PushChannel.fromJson(Map<String, dynamic>.from(resp.data));
+  }
+
+  Future<void> deletePushChannel(int id) async {
+    await _dio.delete('/api/push-channels/$id');
+  }
+
+  Future<String> testPushChannel(int id) async {
+    final resp = await _dio.post('/api/push-channels/$id/test');
+    return (resp.data['message'] ?? '测试消息已发送').toString();
+  }
+
   Future<List<TranslateLanguage>> getTranslateLanguages() async {
     final resp = await _dio.get('/api/translate/languages');
     final list = (resp.data['items'] as List?) ?? const [];

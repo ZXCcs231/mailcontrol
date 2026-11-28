@@ -117,10 +117,7 @@ class AuthNotifier extends Notifier<AuthState> {
         validToken = null;
         await prefs.remove(_kToken);
         api.configure(baseUrl: savedUrl, token: null);
-        unawaited(ref.read(notificationServiceProvider).stopAndroidPushService());
       }
-    } else {
-      unawaited(ref.read(notificationServiceProvider).stopAndroidPushService());
     }
 
     state = state.copyWith(
@@ -213,7 +210,6 @@ class AuthNotifier extends Notifier<AuthState> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_kToken);
     ref.read(sseClientProvider).disconnect();
-    unawaited(ref.read(notificationServiceProvider).stopAndroidPushService());
     ref.read(mailProvider.notifier).resetNotificationState();
     ref.read(apiClientProvider).configure(baseUrl: state.baseUrl, token: null);
     state = state.copyWith(clearToken: true, clearUser: true, clearError: true);
@@ -376,16 +372,7 @@ class MailNotifier extends Notifier<MailState> {
 
     final notif = ref.read(notificationServiceProvider);
     await notif.init(onTap: _handleNotificationTap);
-    if (Platform.isAndroid) {
-      await notif.requestPermissionIfNeeded();
-      await notif.startAndroidPushService(baseUrl: auth.baseUrl, token: auth.token!);
-      final pendingId = await notif.consumePendingAndroidMessageId();
-      if (pendingId != null && pendingId > 0) {
-        _handleNotificationTap('msg:$pendingId');
-      }
-    } else {
-      unawaited(notif.requestPermissionIfNeeded());
-    }
+    unawaited(notif.requestPermissionIfNeeded());
 
     final sse = ref.read(sseClientProvider);
     sse.connect(auth.baseUrl, auth.token!);
@@ -451,9 +438,6 @@ class MailNotifier extends Notifier<MailState> {
   Future<void> _notifyFromSseNewMessages(SseEvent evt) async {
     if (!ref.read(authProvider).isAuthenticated) return;
     final notif = ref.read(notificationServiceProvider);
-    if (Platform.isAndroid && notif.androidPushServiceActive) {
-      return;
-    }
     List<MailMessage> fresh = const [];
     try {
       final res = await _api.getMessages(
@@ -513,18 +497,16 @@ class MailNotifier extends Notifier<MailState> {
 
       if (freshUnread.isNotEmpty) {
         final notif = ref.read(notificationServiceProvider);
-        if (!(Platform.isAndroid && notif.androidPushServiceActive)) {
-          final content = buildNewMailNotificationContent(
-            accountLabel: freshUnread.first.accountLabel,
-            freshMessages: freshUnread,
-          );
-          await notif.showNewMailNotification(
-                id: freshUnread.first.id,
-                title: content.title,
-                body: content.body,
-                payload: content.payload,
-              );
-        }
+        final content = buildNewMailNotificationContent(
+          accountLabel: freshUnread.first.accountLabel,
+          freshMessages: freshUnread,
+        );
+        await notif.showNewMailNotification(
+          id: freshUnread.first.id,
+          title: content.title,
+          body: content.body,
+          payload: content.payload,
+        );
         unawaited(refreshMetadata());
         unawaited(loadMessages(silent: true));
       }

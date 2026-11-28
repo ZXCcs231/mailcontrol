@@ -57,14 +57,10 @@ class NotificationService {
       : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
 
   static const _winChannel = MethodChannel('mailcontrol/windows_notifications');
-  static const _androidPushChannel = MethodChannel('mailcontrol/android_push');
 
   final FlutterLocalNotificationsPlugin _plugin;
   bool _initialized = false;
-  bool _androidPushServiceActive = false;
   void Function(String? payload)? _onTap;
-
-  bool get androidPushServiceActive => _androidPushServiceActive;
 
   Future<void> init({void Function(String? payload)? onTap}) async {
     if (onTap != null) {
@@ -84,11 +80,6 @@ class NotificationService {
       }
 
       if (Platform.isAndroid) {
-        _androidPushChannel.setMethodCallHandler((call) async {
-          if (call.method == 'onNotificationTap') {
-            _onTap?.call(call.arguments as String?);
-          }
-        });
         const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
         const settings = InitializationSettings(android: androidInit);
         await _plugin.initialize(
@@ -98,38 +89,6 @@ class NotificationService {
         _initialized = true;
       }
     } catch (_) {}
-  }
-
-  Future<bool> startAndroidPushService({required String baseUrl, required String token}) async {
-    if (!Platform.isAndroid) return false;
-    try {
-      final started = await _androidPushChannel.invokeMethod<bool>('startPushService', {
-        'baseUrl': baseUrl,
-        'token': token,
-      });
-      _androidPushServiceActive = started == true;
-      return _androidPushServiceActive;
-    } catch (_) {
-      _androidPushServiceActive = false;
-      return false;
-    }
-  }
-
-  Future<void> stopAndroidPushService() async {
-    _androidPushServiceActive = false;
-    if (!Platform.isAndroid) return;
-    try {
-      await _androidPushChannel.invokeMethod<void>('stopPushService');
-    } catch (_) {}
-  }
-
-  Future<int?> consumePendingAndroidMessageId() async {
-    if (!Platform.isAndroid) return null;
-    try {
-      return await _androidPushChannel.invokeMethod<int>('consumePendingMessageId');
-    } catch (_) {
-      return null;
-    }
   }
 
   Future<void> requestPermissionIfNeeded() async {

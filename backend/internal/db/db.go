@@ -187,6 +187,21 @@ CREATE TABLE IF NOT EXISTS system_settings (
 	value TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS push_channels (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	user_id INTEGER NOT NULL,
+	name TEXT NOT NULL,
+	channel_type TEXT NOT NULL DEFAULT 'feishu',
+	enabled INTEGER NOT NULL DEFAULT 1,
+	webhook_url TEXT NOT NULL DEFAULT '',
+	encrypted_secret TEXT NOT NULL DEFAULT '',
+	app_id TEXT NOT NULL DEFAULT '',
+	target_id TEXT NOT NULL DEFAULT '',
+	target_id_type TEXT NOT NULL DEFAULT 'open_id',
+	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 INSERT OR IGNORE INTO system_settings (key, value) VALUES ('allow_register', 'true');
 
 CREATE INDEX IF NOT EXISTS idx_accounts_user ON mail_accounts(user_id);
@@ -195,6 +210,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_user_recv ON messages(user_id, received_
 CREATE INDEX IF NOT EXISTS idx_messages_account_folder_uid ON messages(account_id, folder_id, remote_uid);
 CREATE INDEX IF NOT EXISTS idx_attachments_msg ON attachments(message_id);
 CREATE INDEX IF NOT EXISTS idx_rules_user ON rules(user_id, enabled, priority);
+CREATE INDEX IF NOT EXISTS idx_push_channels_user ON push_channels(user_id, enabled);
 `
 	if _, err := conn.Exec(schema); err != nil {
 		return err

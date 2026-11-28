@@ -11,6 +11,7 @@ import (
 	"mailcontrol-backend/internal/crypto"
 	"mailcontrol-backend/internal/mailclient"
 	"mailcontrol-backend/internal/models"
+	"mailcontrol-backend/internal/push"
 	"mailcontrol-backend/internal/rules"
 )
 
@@ -142,6 +143,9 @@ func (s *Scheduler) SyncAccountNow(acct models.MailAccount) {
 		WHERE id = ?`, now, acct.ID)
 
 	if len(newMsgs) > 0 {
+		if acct.LastSyncAt != nil {
+			go push.NotifyNewMessages(s.db, s.cfg.EncKey, acct, newMsgs)
+		}
 		s.hub.Publish(acct.UserID, Event{
 			Type:      "new_messages",
 			AccountID: acct.ID,

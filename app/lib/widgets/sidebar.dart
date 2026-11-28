@@ -15,6 +15,7 @@ class Sidebar extends ConsumerStatefulWidget {
   final void Function([MailAccount? existing]) onOpenAccountModal;
   final VoidCallback onOpenRules;
   final VoidCallback onOpenSignatures;
+  final VoidCallback onOpenPushChannels;
   final VoidCallback onOpenTags;
 
   const Sidebar({
@@ -24,6 +25,7 @@ class Sidebar extends ConsumerStatefulWidget {
     required this.onOpenAccountModal,
     required this.onOpenRules,
     required this.onOpenSignatures,
+    required this.onOpenPushChannels,
     required this.onOpenTags,
   });
 
@@ -280,8 +282,9 @@ class _SidebarState extends ConsumerState<Sidebar> {
                             _closeIfDrawer();
                             widget.onOpenRules();
                           },
-                          icon: Icon(Icons.auto_fix_high_rounded, size: 16, color: p.textSecondary),
-                          label: Text('自动规则', style: TextStyle(fontSize: 12.5, color: p.textPrimary)),
+                          icon: Icon(Icons.auto_fix_high_rounded, size: 15, color: p.textSecondary),
+                          label: Text('规则', style: TextStyle(fontSize: 12, color: p.textPrimary)),
+                          style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 4)),
                         ),
                       ),
                       Expanded(
@@ -290,8 +293,20 @@ class _SidebarState extends ConsumerState<Sidebar> {
                             _closeIfDrawer();
                             widget.onOpenSignatures();
                           },
-                          icon: Icon(Icons.draw_rounded, size: 16, color: p.textSecondary),
-                          label: Text('签名模板', style: TextStyle(fontSize: 12.5, color: p.textPrimary)),
+                          icon: Icon(Icons.draw_rounded, size: 15, color: p.textSecondary),
+                          label: Text('签名', style: TextStyle(fontSize: 12, color: p.textPrimary)),
+                          style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 4)),
+                        ),
+                      ),
+                      Expanded(
+                        child: TextButton.icon(
+                          onPressed: () {
+                            _closeIfDrawer();
+                            widget.onOpenPushChannels();
+                          },
+                          icon: Icon(Icons.notifications_active_outlined, size: 15, color: p.textSecondary),
+                          label: Text('推送', style: TextStyle(fontSize: 12, color: p.textPrimary)),
+                          style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 4)),
                         ),
                       ),
                     ],

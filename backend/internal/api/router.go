@@ -78,6 +78,12 @@ func NewRouter(conn *sql.DB, cfg *config.Config, hub *syncer.Hub, scheduler *syn
 			auth.PUT("/signatures/:id", srv.UpdateSignature)
 			auth.DELETE("/signatures/:id", srv.DeleteSignature)
 
+			auth.GET("/push-channels", srv.ListPushChannels)
+			auth.POST("/push-channels", srv.CreatePushChannel)
+			auth.PUT("/push-channels/:id", srv.UpdatePushChannel)
+			auth.DELETE("/push-channels/:id", srv.DeletePushChannel)
+			auth.POST("/push-channels/:id/test", srv.TestPushChannel)
+
 			auth.GET("/translate/languages", srv.GetTranslateLanguages)
 			auth.POST("/translate/text", srv.TranslateText)
 			auth.POST("/messages/:id/translate", srv.TranslateMessage)

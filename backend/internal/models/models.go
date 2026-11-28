@@ -179,3 +179,19 @@ type ProviderPreset struct {
 	NeedsIMAPID bool     `json:"needs_imap_id"`
 	AuthTip     string   `json:"auth_tip"`
 }
+
+// PushChannel 表示用户配置的服务端外部推送通道（飞书、企微、钉钉或自定义 Webhook）。
+type PushChannel struct {
+	ID              int64     `json:"id"`
+	UserID          int64     `json:"user_id"`
+	Name            string    `json:"name"`
+	ChannelType     string    `json:"channel_type"` // feishu | feishu_app | wecom | dingtalk | webhook
+	Enabled         bool      `json:"enabled"`
+	WebhookURL      string    `json:"webhook_url"`
+	EncryptedSecret string    `json:"-"`
+	HasSecret       bool      `json:"has_secret"`
+	AppID           string    `json:"app_id"`
+	TargetID        string    `json:"target_id"`
+	TargetIDType    string    `json:"target_id_type"` // open_id | chat_id | user_id | email
+	CreatedAt       time.Time `json:"created_at"`
+}

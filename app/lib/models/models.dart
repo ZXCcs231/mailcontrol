@@ -542,3 +542,39 @@ class MessageTranslation {
         cached: _asBool(j['cached']),
       );
 }
+
+class PushChannel {
+  final int id;
+  final String name;
+  final String channelType; // feishu | feishu_app | wecom | dingtalk | webhook
+  final bool enabled;
+  final String webhookUrl;
+  final bool hasSecret;
+  final String appId;
+  final String targetId;
+  final String targetIdType;
+
+  PushChannel({
+    required this.id,
+    required this.name,
+    required this.channelType,
+    required this.enabled,
+    this.webhookUrl = '',
+    this.hasSecret = false,
+    this.appId = '',
+    this.targetId = '',
+    this.targetIdType = 'open_id',
+  });
+
+  factory PushChannel.fromJson(Map<String, dynamic> j) => PushChannel(
+        id: _asInt(j['id']),
+        name: _asStr(j['name']),
+        channelType: _asStr(j['channel_type'], 'feishu'),
+        enabled: _asBool(j['enabled'], true),
+        webhookUrl: _asStr(j['webhook_url']),
+        hasSecret: _asBool(j['has_secret']),
+        appId: _asStr(j['app_id']),
+        targetId: _asStr(j['target_id']),
+        targetIdType: _asStr(j['target_id_type'], 'open_id'),
+      );
+}
